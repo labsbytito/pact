@@ -51,6 +51,11 @@ export type Health = {
     };
   };
   fo: boolean;
+  needsReconnect?: boolean;
+  keyPresent?: boolean;
+  model?: string | null;
+  foLogin?: "signed-in" | "reconnect" | "signed-out";
+  line?: string;
   tools: { name: string; description?: string }[];
 };
 export type Interpretation = {
@@ -63,6 +68,7 @@ export type Interpretation = {
     toolName: string;
     arguments: Record<string, unknown>;
     expiresAt?: string;
+    consequential?: boolean;
   };
 };
 export const interpret = (pact: Pact) =>
