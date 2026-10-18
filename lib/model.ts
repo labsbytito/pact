@@ -1,3 +1,4 @@
+import { newCharacterSeed } from "./character";
 export type Source = {
   title: string;
   url: string;
@@ -5,6 +6,13 @@ export type Source = {
   text: string;
   selection: string;
   capturedAt: string;
+  tabId?: number;
+  windowId?: number;
+  captureMode?: "page" | "selection" | "picked";
+  viewportText?: string;
+  selectionContext?: string;
+  selectionLabel?: string;
+  pageTextPartial?: boolean;
   videoTime?: number;
   transcript: { start: number; text: string }[];
   transcriptPartial?: boolean;
@@ -29,6 +37,7 @@ export type Action = {
     | "approved"
     | "running"
     | "returned"
+    | "needs_answer"
     | "failed"
     | "unknown"
     | "superseded";
@@ -39,6 +48,7 @@ export type Action = {
 };
 export type Pact = {
   id: string;
+  characterSeed?: string;
   title: string;
   intention: string;
   source?: Source;
@@ -58,10 +68,19 @@ export const message = (role: Message["role"], text: string): Message => ({
   text,
   at: now(),
 });
-export function makePact(intention: string, source?: Source): Pact {
+export function makePact(
+  intention: string,
+  source?: Source,
+  existing: readonly Pact[] = [],
+): Pact {
   const at = now();
+  const id = uid();
   return {
-    id: uid(),
+    id,
+    characterSeed: newCharacterSeed(
+      id,
+      existing.map((p) => p.characterSeed ?? p.id),
+    ),
     title: intention.trim().slice(0, 72),
     intention: intention.trim(),
     source,

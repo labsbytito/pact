@@ -20,7 +20,12 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     const data = await res.json();
     if (!res.ok)
       throw new ApiError(
-        data.error ?? "The companion service could not complete this request.",
+        data.error ??
+          (res.status === 402
+            ? "AI replies are paused by a credit or local budget limit. Your Pact is saved. Check Settings before retrying."
+            : res.status === 429
+              ? "Claude’s usage limit was reached. Your Pact is saved; try again later."
+              : "The companion service could not complete this request."),
         res.status,
       );
     return data;
@@ -34,6 +39,17 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
 }
 export type Health = {
   ai: boolean;
+  aiStatus?: {
+    provider: "none" | "anthropic-api" | "claude-code";
+    model: string | null;
+    budget: {
+      spentUsd: number;
+      capUsd: number;
+      remainingUsd: number;
+      perRequestUsd: number;
+      exhausted: boolean;
+    };
+  };
   fo: boolean;
   tools: { name: string; description?: string }[];
 };

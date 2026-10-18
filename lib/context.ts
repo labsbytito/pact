@@ -22,12 +22,19 @@ export function interpretationContext(pact: Pact) {
     }
     source = {
       ...s,
+      url: s.url.slice(0, 4000),
+      viewportText: s.viewportText?.slice(0, 6000),
+      selectionContext: s.selectionContext?.slice(0, 4000),
+      selectionLabel: s.selectionLabel?.slice(0, 80),
       title: s.title.slice(0, 1000),
       description: s.description.slice(0, 4000),
       text: s.text.slice(0, 12000),
       selection: s.selection.slice(0, 4000),
       transcript: [...unique.values()].sort((a, b) => a.start - b.start),
-      transcriptPartial: unique.size < s.transcript.length,
+      transcriptPartial:
+        !!s.transcriptPartial ||
+        unique.size < s.transcript.length ||
+        candidates.some((line) => line.text.length > 1000),
     };
   }
   const payload = {
@@ -55,6 +62,22 @@ export function interpretationContext(pact: Pact) {
     );
     source.transcript.splice(farthest, 1);
     source.transcriptPartial = true;
+  }
+  if (source) {
+    for (const key of [
+      "description",
+      "text",
+      "selectionContext",
+      "viewportText",
+    ] as const) {
+      while (bytes() > 240000 && (source[key]?.length ?? 0) > 100) {
+        source[key] = source[key]!.slice(
+          0,
+          Math.floor(source[key]!.length / 2),
+        );
+        source.pageTextPartial = true;
+      }
+    }
   }
   return payload;
 }

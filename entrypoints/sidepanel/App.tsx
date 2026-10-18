@@ -25,6 +25,7 @@ import {
   BookOpen,
   MapPin,
   MoreHorizontal,
+  MousePointer2,
 } from "lucide-react";
 import type { Action, Pact, Source, Settings } from "../../lib/model";
 import {
@@ -37,58 +38,46 @@ import {
   approve,
 } from "../../lib/model";
 import { read, write } from "../../lib/storage";
-import { capturePage } from "../../lib/capture";
+import {
+  capturePage,
+  pendingSelection,
+  type SelectionRequest,
+} from "../../lib/capture";
+import type { CaptureMode } from "../../lib/page-reader";
 import { api, interpret, ApiError, type Health } from "../../lib/api";
-function Companion({
-  size = "normal",
-  thinking = false,
-}: {
-  size?: "tiny" | "small" | "normal" | "hero";
-  thinking?: boolean;
-}) {
-  return (
-    <span
-      className={`companion ${size} ${thinking ? "thinking" : ""}`}
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 72 72" fill="none" focusable="false">
-        <path
-          className="mascot-fold"
-          d="M24 11C25 5 32 3 37 7L61 26C68 32 65 40 57 42L43 46L24 11Z"
-        />
-        <path
-          className="mascot-face"
-          d="M13 26C14 18 19 12 27 13L50 17C57 18 61 23 59 31L53 53C51 61 45 65 37 62L17 55C10 53 8 47 10 40L13 26Z"
-        />
-        <path className="mascot-seam" d="M48 17L58 28L53 46" />
-        <rect
-          className="mascot-eye"
-          x="25"
-          y="29"
-          width="4.6"
-          height="11"
-          rx="2.3"
-          transform="rotate(9 25 29)"
-        />
-        <rect
-          className="mascot-eye"
-          x="38"
-          y="31"
-          width="4.6"
-          height="11"
-          rx="2.3"
-          transform="rotate(9 38 31)"
-        />
-      </svg>
-    </span>
-  );
-}
+import Companion from "./Companion";
+import { withCharacterSeeds } from "../../lib/character";
 // Render links as React nodes: captured/returned text never becomes HTML.
 function LinkedText({ text }: { text: string }) {
   const nodes: ReactNode[] = [];
   let previous = 0;
-  for (const match of text.matchAll(/https?:\/\/[^\s<>"`]+/g)) {
+  for (const match of text.matchAll(
+    /\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^\s<>"`]+)\)|https?:\/\/[^\s<>"`*]+/g,
+  )) {
     const start = match.index!;
+    if (match[1]) {
+      nodes.push(
+        text.slice(previous, start),
+        <strong key={start}>
+          <LinkedText text={match[1]} />
+        </strong>,
+      );
+      previous = start + match[0].length;
+      continue;
+    }
+    if (match[2] && match[3]) {
+      const href = safeUrl(match[3]);
+      if (href) {
+        nodes.push(
+          text.slice(previous, start),
+          <a key={start} href={href} target="_blank" rel="noopener noreferrer">
+            {match[2]}
+          </a>,
+        );
+        previous = start + match[0].length;
+        continue;
+      }
+    }
     let candidate = match[0].replace(/[.,;:!?]+$/, "");
     while (
       candidate.endsWith(")") &&
@@ -111,6 +100,62 @@ function LinkedText({ text }: { text: string }) {
   nodes.push(text.slice(previous));
   return <>{nodes}</>;
 }
+// An explicitly labelled excerpt, never a generated summary. Expanding restores the original verbatim.
+function ReadableReply({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > 600;
+  const boundary = text.lastIndexOf(" ", 420);
+  let end = boundary > 240 ? boundary : 420;
+  // A clipped URL must never become a different, clickable source.
+  for (const token of text.matchAll(
+    /\[[^\]\n]+\]\(https?:\/\/[^\s<>]+\)|https?:\/\/[^\s<>]+/g,
+  ))
+    if (token.index! < end && token.index! + token[0].length > end)
+      end = token.index!;
+  const excerpt = text.slice(0, end).trimEnd();
+  return (
+    <>
+      {long && !expanded && (
+        <small className="reply-excerpt-label">Opening excerpt</small>
+      )}
+      <p>
+        <LinkedText text={long && !expanded ? `${excerpt}…` : text} />
+      </p>
+      {long && (
+        <button
+          className="text-button reply-disclosure"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? "Show less" : "Read full reply"}
+          <ChevronRight size={13} />
+        </button>
+      )}
+    </>
+  );
+}
+function RequestText({
+  text,
+  proposed = false,
+}: {
+  text: string;
+  proposed?: boolean;
+}) {
+  if (proposed && text.length <= 220)
+    return (
+      <p>
+        <LinkedText text={text} />
+      </p>
+    );
+  return (
+    <details className="request-details">
+      <summary>{proposed ? "Request details" : "Original request"}</summary>
+      <p>
+        <LinkedText text={text} />
+      </p>
+    </details>
+  );
+}
 const statusText = (a?: Action) =>
   !a
     ? "Conversation"
@@ -119,6 +164,7 @@ const statusText = (a?: Action) =>
         approved: "Approved",
         running: "Fo is working",
         returned: "Fo replied",
+        needs_answer: "Fo needs your answer",
         failed: "Needs attention",
         unknown: "Outcome needs checking",
         superseded: "Replaced by a newer intention",
@@ -155,6 +201,11 @@ export default function App() {
     [authUrl, setAuthUrl] = useState<string>();
   const dialog = useRef<HTMLElement>(null);
   const initialCaptureAllowed = useRef(true);
+  const captureGeneration = useRef(0),
+    handledSelection = useRef<string | undefined>(undefined);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("page");
+  const [pageStale, setPageStale] = useState(false),
+    [clock, setClock] = useState(Date.now());
   const composer = useRef<HTMLTextAreaElement>(null),
     end = useRef<HTMLDivElement>(null),
     pactsRef = useRef(pacts),
@@ -172,12 +223,18 @@ export default function App() {
     Promise.all([
       read<Pact[]>("pacts", []),
       read<Settings>("settings", { onboarded: false }),
+      read<string | null>("activePact", null),
     ])
-      .then(([p, s]) => {
+      .then(([stored, s, last]) => {
         if (cancelled) return;
+        const p = withCharacterSeeds(stored);
         setPacts(p);
         pactsRef.current = p;
+        if (stored.some((item) => !item.characterSeed))
+          void save(p).catch(() => {});
         setSettings(s);
+        if (last && p.some((item) => item.id === last && !item.archived))
+          setSelected(last);
         setLoaded(true);
         // Only the initial toolbar invocation, in the actual extension, reads a tab.
         if (
@@ -186,9 +243,24 @@ export default function App() {
           initialCaptureAllowed.current
         ) {
           setCapturing(true);
-          void capturePage()
+          void pendingSelection()
+            .then(async (request) => {
+              const window = await chrome.windows.getCurrent();
+              if (request && request.windowId === window.id) {
+                if (handledSelection.current === request.id) return;
+                handledSelection.current = request.id;
+              }
+              return capturePage(
+                request?.windowId === window.id ? "selection" : "page",
+                request?.windowId === window.id ? request : undefined,
+              );
+            })
             .then((page) => {
-              if (!cancelled && initialCaptureAllowed.current) setSource(page);
+              if (page && !cancelled && initialCaptureAllowed.current) {
+                setSource(page);
+                setPageStale(false);
+                setClock(Date.now());
+              }
             })
             .catch(() => {})
             .finally(() => {
@@ -203,15 +275,75 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    if (typeof chrome === 'undefined' || !chrome.runtime?.id) return;
-    const invoked = (event: {type?:string}) => {
-      if (event.type !== 'pact-invocation' || selected) return;
-      setCapturing(true);
-      void capturePage().then(setSource).catch(() => {}).finally(() => setCapturing(false));
+    if (loaded) void write("activePact", selected ?? null).catch(() => {});
+  }, [selected, loaded]);
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) return;
+    const invoked = (event: {
+      type?: string;
+      windowId?: number;
+      selection?: SelectionRequest;
+    }) => {
+      if (event.type !== "pact-invocation" && event.type !== "pact-selection")
+        return;
+      void chrome.windows.getCurrent().then((window) => {
+        const targetWindow = event.selection?.windowId ?? event.windowId;
+        if (targetWindow !== window.id) return;
+        if (event.selection) {
+          if (handledSelection.current === event.selection.id) return;
+          handledSelection.current = event.selection.id;
+          const generation = ++captureGeneration.current;
+          initialCaptureAllowed.current = false;
+          setCapturing(true);
+          setError("");
+          void capturePage("selection", event.selection)
+            .then((page) => {
+              if (generation !== captureGeneration.current) return;
+              setSelected(undefined);
+              setView("chat");
+              setSource(page);
+              setDraft("");
+              setPageStale(false);
+              setClock(Date.now());
+            })
+            .catch((e) => setError(errorText(e)))
+            .finally(() => setCapturing(false));
+        } else void capture("page");
+      });
     };
     chrome.runtime.onMessage.addListener(invoked);
     return () => chrome.runtime.onMessage.removeListener(invoked);
   }, [selected]);
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 30000);
+    if (typeof chrome === "undefined" || !chrome.runtime?.id)
+      return () => clearInterval(timer);
+    const activate = (info: { tabId: number; windowId: number }) => {
+      if (
+        currentSource?.windowId === info.windowId &&
+        currentSource?.tabId !== info.tabId
+      )
+        setPageStale(true);
+    };
+    const changed = (id: number, info: { url?: string; status?: string }) => {
+      if (
+        currentSource?.tabId === id &&
+        (info.url || info.status === "loading")
+      )
+        setPageStale(true);
+    };
+    chrome.tabs.onActivated.addListener(activate);
+    chrome.tabs.onUpdated.addListener(changed);
+    return () => {
+      clearInterval(timer);
+      chrome.tabs.onActivated.removeListener(activate);
+      chrome.tabs.onUpdated.removeListener(changed);
+    };
+  }, [
+    currentSource?.tabId,
+    currentSource?.windowId,
+    currentSource?.capturedAt,
+  ]);
   async function refreshHealth() {
     try {
       setHealth(await api<Health>("/health"));
@@ -273,6 +405,9 @@ export default function App() {
   }
   function newPact() {
     initialCaptureAllowed.current = false;
+    captureGeneration.current++;
+    setCapturing(false);
+    setPageStale(false);
     setSelected(undefined);
     setView("chat");
     setSource(undefined);
@@ -282,27 +417,60 @@ export default function App() {
   }
   function openPact(p: Pact) {
     initialCaptureAllowed.current = false;
+    captureGeneration.current++;
+    setCapturing(false);
+    setPageStale(false);
     setSelected(p.id);
     setView("chat");
     setDraft("");
     setError("");
   }
-  async function capture() {
+  async function capture(mode: CaptureMode = "page") {
     initialCaptureAllowed.current = false;
+    const generation = ++captureGeneration.current,
+      targetId = selected;
+    setCaptureMode(mode);
     setCapturing(true);
     setError("");
     try {
-      const s = await capturePage();
-      if (active) await update({ ...active, source: s });
-      else setSource(s);
+      const page = await capturePage(mode);
+      if (generation !== captureGeneration.current) return;
+      if (targetId) {
+        const latest = pactsRef.current.find((p) => p.id === targetId);
+        if (latest) {
+          if (latest.action?.status === "proposed" && latest.action.planId)
+            await api("/actions/cancel", {
+              planId: latest.action.planId,
+            }).catch(() => {});
+          const current =
+            pactsRef.current.find((p) => p.id === targetId) ?? latest;
+          await update({ ...supersedeProposal(current), source: page });
+        }
+      } else setSource(page);
+      setPageStale(false);
+      setClock(Date.now());
     } catch (e) {
-      setError(errorText(e));
+      if (generation === captureGeneration.current)
+        setError(
+          /^Selection cancelled/i.test(errorText(e)) ? "" : errorText(e),
+        );
     } finally {
-      setCapturing(false);
+      if (generation === captureGeneration.current) setCapturing(false);
     }
   }
+  const captureAge = currentSource
+    ? Math.max(
+        0,
+        Math.floor((clock - Date.parse(currentSource.capturedAt)) / 60000),
+      )
+    : 0;
+  const captureLabel = pageStale
+    ? "Page changed · refresh to share it"
+    : captureAge > 0
+      ? `Read ${captureAge} min ago · saved snapshot`
+      : "Read just now · saved snapshot";
   async function send() {
-    if (!draft.trim() || busy) return;
+    if (!draft.trim() || busy || capturing) return;
     initialCaptureAllowed.current = false;
     setBusy(true);
     setError("");
@@ -318,7 +486,7 @@ export default function App() {
       const base = active ? supersedeProposal(active) : undefined;
       p = base
         ? { ...base, messages: [...base.messages, message("user", text)] }
-        : makePact(text, source);
+        : makePact(text, source, pactsRef.current);
       if (active) await update(p);
       else {
         await save([p, ...pactsRef.current]);
@@ -426,7 +594,8 @@ export default function App() {
         try {
           const run = await api<{
             runId: string;
-            status: "running" | "returned" | "failed" | "unknown";
+            status:
+              "running" | "returned" | "needs_answer" | "failed" | "unknown";
             result?: string;
             error?: string;
             progress?: string;
@@ -458,7 +627,20 @@ export default function App() {
               });
           }
         } catch (e) {
-          if (!cancelled) setError(errorText(e));
+          if (!cancelled && e instanceof ApiError && e.status === 404) {
+            const latest = pactsRef.current.find((x) => x.id === p.id);
+            if (latest?.action?.id === p.action?.id && latest?.action)
+              await update({
+                ...latest,
+                action: {
+                  ...latest.action,
+                  status: "unknown",
+                  progress: undefined,
+                  result:
+                    "Pact could not find the original run. Check your Fo activity before requesting this action again.",
+                },
+              });
+          } else if (!cancelled) setError(errorText(e));
         }
       }
     }
@@ -582,7 +764,7 @@ export default function App() {
                 onClick={() => openPact(p)}
               >
                 <span className={`thread-avatar tone-${i % 4}`}>
-                  <Companion size="small" />
+                  <Companion seed={p.characterSeed ?? p.id} size="small" />
                 </span>
                 <span>
                   <strong>{p.title}</strong>
@@ -628,14 +810,17 @@ export default function App() {
             aria-label="New Pact"
             title="New Pact"
           >
-            <Companion size="tiny" />
+            <Companion seed={view === "chat" ? active?.characterSeed ?? active?.id : undefined} size="tiny" />
             <span>pact.</span>
           </button>
           <div className="topbar-title">
             {active && view === "chat" ? (
               <>
                 <span className="header-avatar">
-                  <Companion size="small" />
+                  <Companion
+                    seed={active.characterSeed ?? active.id}
+                    size="small"
+                  />
                 </span>
                 <span>
                   {active.title}
@@ -710,7 +895,7 @@ export default function App() {
                   onClick={() => openPact(p)}
                 >
                   <span className={`tile-avatar tone-${i % 4}`}>
-                    <Companion size="normal" />
+                    <Companion seed={p.characterSeed ?? p.id} size="normal" />
                   </span>
                   <span className="tile-copy">
                     <span className="tile-heading">
@@ -870,15 +1055,26 @@ export default function App() {
                     )}
                     {active.messages.map((m, i) => (
                       <div key={m.id} className={`message-row ${m.role}`}>
-                        {m.role === "assistant" && <Companion size="tiny" />}
+                        {m.role === "assistant" && (
+                          <Companion
+                            seed={active.characterSeed ?? active.id}
+                            size="tiny"
+                            state={
+                              active.action?.status === "running"
+                                ? "working"
+                                : active.action?.status === "unknown" ||
+                                    active.action?.status === "failed"
+                                  ? "attention"
+                                  : "idle"
+                            }
+                          />
+                        )}
                         <div className="message">
-                          <p>
-                            {m.role === "assistant" ? (
-                              <LinkedText text={m.text} />
-                            ) : (
-                              m.text
-                            )}
-                          </p>
+                          {m.role === "assistant" ? (
+                            <ReadableReply text={m.text} />
+                          ) : (
+                            <p>{m.text}</p>
+                          )}
                           <time>
                             {new Date(m.at).toLocaleTimeString(undefined, {
                               hour: "numeric",
@@ -890,7 +1086,11 @@ export default function App() {
                     ))}
                     {busy && (
                       <div className="message-row assistant">
-                        <Companion size="tiny" thinking />
+                        <Companion
+                          seed={active?.characterSeed ?? active?.id}
+                          size="tiny"
+                          thinking
+                        />
                         <div className="thinking-bubble" role="status">
                           <i />
                           <i />
@@ -908,13 +1108,12 @@ export default function App() {
                           {statusText(active.action)}
                         </div>
                         <h2>{active.action.title}</h2>
-                        <p>{active.action.instruction}</p>
+                        <RequestText
+                          text={active.action.instruction}
+                          proposed={active.action.status === "proposed"}
+                        />
                         {active.action.status === "proposed" && (
                           <>
-                            <div className="action-assurance">
-                              <ShieldCheck size={15} /> You review it. Fo takes
-                              the next step.
-                            </div>
                             <button
                               className="primary"
                               onClick={() =>
@@ -944,6 +1143,9 @@ export default function App() {
                               "Waiting for Fo’s actual response…"}
                           </div>
                         )}
+                        {active.action.status === "needs_answer" && (
+                          <p>Reply below to continue.</p>
+                        )}
                         {active.action.status === "unknown" && (
                           <p>
                             Fo may have acted before the companion was
@@ -956,18 +1158,27 @@ export default function App() {
                             <strong>
                               {active.action.status === "failed"
                                 ? "Needs attention"
-                                : "Response from Fo"}
+                                : active.action.status === "needs_answer"
+                                  ? "Fo needs your answer"
+                                  : "Response from Fo"}
                             </strong>
-                            <p>
-                              <LinkedText text={active.action.result} />
-                            </p>
-                            {active.action.status === "returned" && (
-                              <small>
-                                A reply is not proof that every requested task
-                                is complete. Check the outcome above.
-                              </small>
+                            {active.action.status === "needs_answer" ? (
+                              <p>
+                                <LinkedText text={active.action.result} />
+                              </p>
+                            ) : (
+                              <ReadableReply text={active.action.result} />
                             )}
                           </div>
+                        )}
+                        {active.action.status === "needs_answer" && (
+                          <button
+                            className="secondary"
+                            onClick={() => composer.current?.focus()}
+                          >
+                            Answer Fo
+                            <ArrowUpRight size={15} />
+                          </button>
                         )}
                       </article>
                     )}
@@ -982,12 +1193,10 @@ export default function App() {
                               {statusText(a)}
                             </div>
                             <h2>{a.title}</h2>
-                            <p>{a.instruction}</p>
+                            <RequestText text={a.instruction} />
                             {a.result && (
                               <div className="result">
-                                <p>
-                                  <LinkedText text={a.result} />
-                                </p>
+                                <ReadableReply text={a.result} />
                               </div>
                             )}
                           </article>
@@ -1053,11 +1262,40 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {capturing && captureMode === "pick" && (
+                <p className="capture-instruction" role="status">
+                  Choose an item on the page. Press Esc there to cancel.
+                </p>
+              )}
+              <div className="page-controls" aria-label="Page context controls">
+                <button
+                  className="text-button"
+                  onClick={() => void capture("page")}
+                  disabled={capturing}
+                >
+                  <RotateCcw size={14} />
+                  {capturing ? "Reading…" : "Read current page"}
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => void capture("pick")}
+                  disabled={capturing}
+                >
+                  <MousePointer2 size={14} />
+                  Select item
+                </button>
+              </div>
               {currentSource && (
-                <div className="attached-source">
+                <div className={`attached-source ${pageStale ? "stale" : ""}`}>
                   <button onClick={() => setSourceOpen(true)}>
                     <Link2 size={14} />
-                    <span>{currentSource.title}</span>
+                    <span>
+                      {currentSource.title}
+                      <small>
+                        {currentSource.selection ? "Selected item · " : ""}
+                        {captureLabel}
+                      </small>
+                    </span>
                     {currentSource.videoTime !== undefined && (
                       <small>{timestamp(currentSource.videoTime)}</small>
                     )}
@@ -1067,7 +1305,10 @@ export default function App() {
                     aria-label="Remove page context"
                     onClick={async () => {
                       if (active)
-                        await update({ ...active, source: undefined });
+                        await update({
+                          ...supersedeProposal(active),
+                          source: undefined,
+                        });
                       else setSource(undefined);
                     }}
                   >
@@ -1079,7 +1320,13 @@ export default function App() {
                 <textarea
                   ref={composer}
                   aria-label="Message Pact"
-                  placeholder={listening ? "Listening…" : "Message Pact…"}
+                  placeholder={
+                    listening
+                      ? "Listening…"
+                      : active?.action?.status === "needs_answer"
+                        ? "Reply to Fo…"
+                        : "Message Pact…"
+                  }
                   value={draft}
                   maxLength={8000}
                   rows={1}
@@ -1100,7 +1347,7 @@ export default function App() {
                     className="icon-button"
                     title="Add current page"
                     aria-label="Add current page"
-                    onClick={capture}
+                    onClick={() => void capture("page")}
                     disabled={capturing}
                   >
                     {capturing ? (
@@ -1125,7 +1372,7 @@ export default function App() {
                   </button>
                   <button
                     className="send-button"
-                    disabled={!draft.trim() || busy}
+                    disabled={!draft.trim() || busy || capturing}
                     onClick={send}
                     aria-label="Send message"
                   >
@@ -1268,14 +1515,53 @@ export default function App() {
                     <span
                       className={`state-tag ${health.ai ? "connected" : ""}`}
                     >
-                      {health.ai ? "Available" : "Not connected"}
+                      {health.aiStatus?.budget.exhausted
+                        ? "Paused · local limit"
+                        : health.ai
+                          ? "Available"
+                          : "Not connected"}
                     </span>
                   </div>
                   <p className="setting-description">
                     {health.ai
                       ? "Claude helps make sense of your intention and the context you choose to share."
-                      : "Connect a permitted Claude API key through the local companion. You can create and save Pacts while it’s offline."}
+                      : "Connect Claude through the local companion. You can create and save Pacts while AI is offline."}
                   </p>
+                  {health.aiStatus?.model && (
+                    <div className="setting-line">
+                      <span>Model</span>
+                      <span>
+                        {health.aiStatus.model === "claude-code-default"
+                          ? "Claude account default"
+                          : health.aiStatus.model}
+                      </span>
+                    </div>
+                  )}
+                  {health.aiStatus && health.aiStatus.provider !== "none" && (
+                    <>
+                      <div className="setting-line">
+                        <span>Connection</span>
+                        <span>
+                          {health.aiStatus.provider === "claude-code"
+                            ? "Claude Code"
+                            : "Anthropic API"}
+                        </span>
+                      </div>
+                      <div className="setting-line">
+                        <span>Local AI allowance</span>
+                        <span>
+                          ${health.aiStatus.budget.remainingUsd.toFixed(2)} / $
+                          {health.aiStatus.budget.capUsd.toFixed(2)} left
+                        </span>
+                      </div>
+                      <p className="setting-description">
+                        ${health.aiStatus.budget.spentUsd.toFixed(2)} reserved ·
+                        up to ${health.aiStatus.budget.perRequestUsd.toFixed(2)}{" "}
+                        per reply. This local limit is separate from your Claude
+                        account balance.
+                      </p>
+                    </>
+                  )}
                   <div className="setting-line">
                     <span>Local companion</span>
                     <span>{companionOnline ? "Running" : "Offline"}</span>
@@ -1295,6 +1581,17 @@ export default function App() {
                 <div className="source-detail">
                   <Globe size={26} />
                   <h3>{currentSource.title}</h3>
+                  <p>
+                    {captureLabel} ·{" "}
+                    {new Date(currentSource.capturedAt).toLocaleTimeString(
+                      undefined,
+                      { hour: "numeric", minute: "2-digit" },
+                    )}
+                  </p>
+                  <p>
+                    Only this snapshot is shared. Read current page again after
+                    scrolling, changing tabs, or moving through a video.
+                  </p>
                   <a
                     href={sourceLink(currentSource, currentSource.videoTime)}
                     target="_blank"
@@ -1355,13 +1652,30 @@ export default function App() {
                     )}
                   </div>
                 )}
+                {currentSource.viewportText && (
+                  <details>
+                    <summary>Visible when captured</summary>
+                    <p className="captured-text">
+                      {currentSource.viewportText}
+                    </p>
+                  </details>
+                )}
+                {currentSource.pageTextPartial && (
+                  <p className="setting-description">
+                    Page text was shortened. Select the specific item for more
+                    focused context.
+                  </p>
+                )}
                 <details>
                   <summary>Captured page text</summary>
                   <p className="captured-text">
                     {currentSource.text || "No article text was available."}
                   </p>
                 </details>
-                <button className="secondary full" onClick={capture}>
+                <button
+                  className="secondary full"
+                  onClick={() => void capture("page")}
+                >
                   Refresh from current page
                 </button>
               </>

@@ -7,7 +7,14 @@ export default defineConfig({
     name: "Pact — turn inspiration into action",
     description:
       "A little intention. A real next step. Your companion beside the web.",
-    permissions: ["storage", "activeTab", "scripting", "sidePanel", "identity"],
+    permissions: [
+      "storage",
+      "activeTab",
+      "scripting",
+      "sidePanel",
+      "identity",
+      "contextMenus",
+    ],
     host_permissions: ["http://127.0.0.1:4317/*"],
     action: { default_title: "Make a Pact" },
     icons: {

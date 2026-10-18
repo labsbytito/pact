@@ -30,4 +30,16 @@ The local companion successfully completed dynamic registration, OAuth PKCE and 
 
 Five tools were actually discovered: `ask_fo`, `get_fo_conversation`, `get_fo_reply`, `list_fo_conversations`, and `start_fo_call`. The implementation now polls `working` replies, routes each Pact to a private Fo conversation, serializes requests, and retains uncertainty after interruptions. Conversation handles and credentials are never included in public evidence.
 
+## Stage two: conversation-to-action reliability (offline-tested only)
+No live Fo or paid AI call was made. Verified only with mocked MCP replies (`tests/fo-envelope.test.ts`, `fo-runner.test.ts`, `ai.test.ts`).
+
+- Reply decoding accepts `structuredContent`, wrapped shapes (`result`/`data`/`output`/`structuredContent`, objects or JSON strings) and JSON or plain text blocks. Real Fo field names beyond `status`, `response`, `conversationId`, `progress` are unverified, so aliases are accepted.
+- Settled outcomes: `complete`, `failed`, `needs_answer`. Anything else (unknown status, empty or malformed reply, polling error, max polls, missing handle) throws and the run becomes `unknown` with "check Fo activity". It is never reported as complete.
+- Run status `needs_answer` is new: `result` holds Fo's question. Progress is kept on the run through to the terminal state.
+- `NotSubmittedError` (not connected or tool gone, raised before any Fo call) yields a definite `failed` run saying the request was not sent. Errors after Fo accepted a request are always uncertain.
+- Budget exhaustion on a failed reply sets `reason: "budget"` and a clear run error.
+- Per-Pact Fo handles live in `.local/fo-threads.json` (0600), are cleared on disconnect and when a fresh sign-in starts, and late saves from in-flight asks are ignored. Model-supplied `conversationId`/`newConversation` are stripped; each Pact's own handle is used.
+- `/interpret`: one in-flight interpretation per Pact (409 otherwise); while a Fo question is unanswered only `ask_fo` can be proposed; an `ask_fo` proposal's displayed instruction is forced to equal the exact message sent; a bad action is withheld without discarding the reply.
+- AI: direct API default `claude-sonnet-5-5` (`ANTHROPIC_MODEL` overrides). CLI model only via `PACT_CLAUDE_MODEL`. Budget caps now apply to both providers. `/health` adds non-secret `aiStatus`. Provider errors map to specific messages with 402/429/502/503/504; unknown server errors return 500.
+
 A real-world booking or other consequential action has not been tested. The user will choose the demonstration later; no fixed demo flow is built into the product.

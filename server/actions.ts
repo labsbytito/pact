@@ -6,6 +6,8 @@ import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv
 import type { JsonSchemaType } from "@modelcontextprotocol/sdk/validation";
 
 export class ActionError extends Error {}
+// Thrown only before anything reached Fo, so the run is a definite failure rather than uncertain.
+export class NotSubmittedError extends ActionError {}
 export type PlanInput = {
   title: string;
   instruction: string;
@@ -23,7 +25,7 @@ export type Plan = PlanInput & {
 export type Run = {
   runId: string;
   planId: string;
-  status: "running" | "returned" | "failed" | "unknown";
+  status: "running" | "returned" | "needs_answer" | "failed" | "unknown";
   startedAt: string;
   finishedAt?: string;
   result?: string;
@@ -190,6 +192,37 @@ export class ActionStore {
   getByPlan(id: string) {
     return structuredClone(this.data.runs.find((r) => r.planId === id));
   }
+  recentActivity(pactId?: string) {
+    if (!pactId) return [];
+    return this.data.plans
+      .filter((plan) => plan.pactId === pactId && plan.runId)
+      .slice(-3)
+      .flatMap((plan) => {
+        const run = this.data.runs.find((item) => item.runId === plan.runId);
+        return run
+          ? [
+              {
+                title: plan.title,
+                request: plan.instruction.slice(0, 1000),
+                status: run.status,
+                reply: run.result?.slice(0, 4000),
+                error: run.error?.slice(0, 1000),
+                at: run.finishedAt ?? run.startedAt,
+              },
+            ]
+          : [];
+      });
+  }
+  // The Fo question awaiting the user's answer in this Pact, if its latest run asked one.
+  awaitingAnswer(pactId?: string) {
+    if (!pactId) return undefined;
+    for (let i = this.data.plans.length - 1; i >= 0; i--) {
+      const plan = this.data.plans[i];
+      if (!plan || plan.pactId !== pactId || !plan.runId) continue;
+      const run = this.data.runs.find((r) => r.runId === plan.runId);
+      return run?.status === "needs_answer" ? run.result : undefined;
+    }
+  }
   async progress(planId: string, text: string) {
     await this.transaction((data) => {
       const run = data.runs.find((r) => r.planId === planId);
@@ -277,22 +310,31 @@ export class ActionStore {
               "Fo returned no text. Inspect Fo activity for the outcome.",
           },
         );
+      const shortened =
+        rendered.length > 32768
+          ? `${rendered.slice(0, 32700)}\n[Response shortened. Inspect Fo activity for the full result.]`
+          : rendered;
+      const state = (result.structuredContent as any)?.status;
+      const reason = (result.structuredContent as any)?.reason;
       outcome =
         result.isError === true
           ? {
               status: "failed",
               error:
-                "Fo reported an error. Check Fo activity for details before trying again.",
+                reason === "budget"
+                  ? `Fo's credits or budget look exhausted, so it could not do this. Fo said: ${text.slice(0, 500)}`
+                  : text
+                    ? `Fo reported an error: ${text.slice(0, 500)}`
+                    : "Fo reported an error. Check Fo activity for details before trying again.",
             }
-          : {
-              status: "returned",
-              result:
-                rendered.length > 32768
-                  ? `${rendered.slice(0, 32700)}\n[Response shortened. Inspect Fo activity for the full result.]`
-                  : rendered,
-            };
-    } catch {
-      outcome = { status: "unknown", error: uncertain };
+          : state === "needs_answer"
+            ? { status: "needs_answer", result: shortened }
+            : { status: "returned", result: shortened };
+    } catch (e) {
+      outcome =
+        e instanceof NotSubmittedError
+          ? { status: "failed", error: e.message }
+          : { status: "unknown", error: uncertain };
     }
     await this.transaction((data) => {
       const run = data.runs.find((r) => r.runId === runId);

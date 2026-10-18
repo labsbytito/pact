@@ -61,6 +61,12 @@ test("concurrent approvals and lost-response retry execute one immutable request
   assert.equal(onDisk.plans[0].runId, first.runId);
   finish({ content: [{ type: "text", text: "Mock accepted" }] });
   assert.equal((await terminal(store, first.runId)).status, "returned");
+  const activity = store.recentActivity(input.pactId);
+  assert.equal(activity[0]?.reply, "Mock accepted");
+  assert.equal(activity[0]?.status, "returned");
+  assert.deepEqual(store.recentActivity("another-pact"), []);
+  assert.ok(!JSON.stringify(activity).includes(first.runId));
+  assert.ok(!JSON.stringify(activity).includes("recipient"));
   const retry = await store.approve(plan.planId, {
     validate() {
       throw new Error("Must not revalidate/resubmit accepted work");

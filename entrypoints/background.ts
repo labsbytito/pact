@@ -1,12 +1,73 @@
 export default defineBackground(() => {
-  // The actual action invocation supplies the right tab even across multiple windows.
-  // Open synchronously from this user gesture; don't rely on the focused window later.
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(console.error);
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: false })
+    .catch(console.error);
+  const menuId = "pact-from-selection";
+  const register = () => {
+    chrome.contextMenus.remove(menuId, () => {
+      void chrome.runtime.lastError;
+      chrome.contextMenus.create({
+        id: menuId,
+        title: "Make a Pact from selection",
+        contexts: ["selection"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+      });
+    });
+  };
+  chrome.runtime.onInstalled.addListener(register);
+  chrome.runtime.onStartup.addListener(register);
   chrome.action.onClicked.addListener((tab) => {
     if (tab.id === undefined) return;
-    void chrome.storage.session.set({
-      pactInvocation: { tabId: tab.id, windowId: tab.windowId },
-    }).then(() => chrome.runtime.sendMessage({type:'pact-invocation'}).catch(() => {}));
+    void chrome.storage.session
+      .set({
+        pactInvocation: { tabId: tab.id, windowId: tab.windowId },
+        [`pactInvocation:${tab.windowId}`]: {
+          tabId: tab.id,
+          windowId: tab.windowId,
+        },
+      })
+      .then(() =>
+        chrome.runtime
+          .sendMessage({
+            type: "pact-invocation",
+            tabId: tab.id,
+            windowId: tab.windowId,
+          })
+          .catch(() => {}),
+      );
+    void chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
+  });
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (
+      info.menuItemId !== menuId ||
+      tab?.id === undefined ||
+      !info.selectionText ||
+      !info.pageUrl
+    )
+      return;
+    const selection = {
+      id: crypto.randomUUID(),
+      tabId: tab.id,
+      windowId: tab.windowId,
+      url: info.pageUrl,
+      text: info.selectionText.slice(0, 6000),
+      at: Date.now(),
+      frameId: info.frameId,
+    };
+    void chrome.storage.session
+      .set({
+        pactInvocation: { tabId: tab.id, windowId: tab.windowId },
+        [`pactInvocation:${tab.windowId}`]: {
+          tabId: tab.id,
+          windowId: tab.windowId,
+        },
+        pactSelection: selection,
+      })
+      .then(() =>
+        chrome.runtime
+          .sendMessage({ type: "pact-selection", selection })
+          .catch(() => {}),
+      );
     void chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
   });
 });

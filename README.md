@@ -14,7 +14,7 @@ pnpm build
 pnpm server
 ```
 
-In Chrome, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `.output/chrome-mv3`. Open an ordinary webpage and click the Pact toolbar icon to grant access to that page. Click **Start with this page** to capture its context. Chrome internal pages and the Web Store cannot be captured.
+In Chrome, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `.output/chrome-mv3`. Open an ordinary webpage and click the Pact toolbar icon to grant access. **Read current page** refreshes what is visible, including within an existing Pact. **Select item** highlights an item without activating its links or buttons; Escape cancels. Highlighted text can also be shared through **Make a Pact from selection** in Chrome's context menu. Chrome internal pages and the Web Store cannot be captured.
 
 For visual preview, serve `.output/chrome-mv3` on `http://127.0.0.1:5173` and open `/sidepanel.html`. A normal web preview cannot read other tabs; page capture needs the extension.
 
@@ -29,7 +29,7 @@ ANTHROPIC_API_KEY=your_key ANTHROPIC_MODEL=your_model pnpm server
 For **local development/testing only**, an opt-in adapter can use an already signed-in Claude Code CLI without reading or copying its credentials:
 
 ```sh
-PACT_AI=claude-code PACT_AI_REQUEST_CAP=0.15 PACT_AI_SESSION_CAP=1 pnpm server
+PACT_AI=claude-code PACT_CLAUDE_MODEL=claude-sonnet-5-5 PACT_AI_REQUEST_CAP=0.10 PACT_AI_SESSION_CAP=3 pnpm server
 ```
 
 The CLI adapter disables all tools and MCP servers. It reserves the full per-request cap conservatively in `.local/ai-usage.json` and refuses further requests at the total cap, including after restarts. Each message can use existing API credit. It is not a production inference service or an entitlement to use restricted credits outside their terms. No account balance is assumed by the application.
@@ -49,6 +49,15 @@ Fo is optional for saving Pacts and chatting. The local companion must be runnin
 - Live Fo tool discovery, schema-validated requests, exact request review, single-use idempotent approval and durable run journal.
 - Polling of long-running Fo replies; private per-Pact conversation handles; uncertain outcomes stay uncertain across restarts.
 - Optional editable speech dictation where Chrome supports it.
+- Persistent original characters per Pact, with collision avoidance for shape/color pairs, plus restrained glass controls and readable opaque messages.
+- Explicit viewport/selection context, tab/window/navigation guards, capture freshness, and automatic reopening of the last active Pact.
+- Fo question/reply continuity, actual prior Fo replies available to interpretation, concise conversation defaults and expandable full results.
+
+## Live verification
+
+On 18 October 2026, the installed extension captured the visible lower section of a long test page and selected the intended item without activating its button. Escape cancellation was checked in the installed build. Wikipedia, Reddit and YouTube metadata/playback capture were also tested; YouTube speech availability remains variable.
+
+The real interface sent reviewed public research to Fo, displayed the returned British Museum visit information, then sent a follow-up for the official accessibility URL in the same Pact. Reload recovery and retained action history were checked. No booking, payment, account creation or external message was tested. Claude Code's separate Fo MCP login was authenticated and its read-only tool call succeeded. See [RUN-TRACE.md](RUN-TRACE.md).
 
 ## Honest limits
 

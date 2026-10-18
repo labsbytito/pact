@@ -6,6 +6,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { NotSubmittedError } from "./actions";
 import { randomBytes } from "node:crypto";
 const directory = new URL("../.local/", import.meta.url);
 const file = new URL("fo.json", directory);
@@ -186,9 +187,14 @@ export async function disconnectFo() {
   await persist();
 }
 export async function callFo(name: string, args: Record<string, unknown>) {
-  if (!client) throw new Error("Connect Fo first.");
+  if (!client)
+    throw new NotSubmittedError(
+      "Fo isn't connected. Reconnect Fo in Pact. This request was not sent.",
+    );
   if (!tools.some((t) => t.name === name))
-    throw new Error("This Fo tool is not available.");
+    throw new NotSubmittedError(
+      "This Fo tool is not available. This request was not sent.",
+    );
   return client.callTool({ name, arguments: args }, undefined, {
     timeout: 300000,
   });

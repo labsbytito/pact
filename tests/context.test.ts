@@ -136,3 +136,47 @@ test("UTF-8 budget includes multibyte video and conversation text", () => {
     Buffer.byteLength(JSON.stringify(interpretationContext(p))) <= 240000,
   );
 });
+
+test("visible selection and its capture limits survive interpretation budgeting", () => {
+  const source: Source = {
+    title: "Scrolled post",
+    url: "https://example.org/thread",
+    description: "",
+    text: "Selected item: This exact item\nVisible on screen: Current section",
+    selection: "This exact item",
+    viewportText: "Current section",
+    selectionContext: "The containing post",
+    captureMode: "picked",
+    capturedAt: new Date().toISOString(),
+    transcript: [],
+    transcriptStatus: "not-video",
+    transcriptPartial: true,
+  };
+  const result = interpretationContext(makePact("Explain this", source)).pact
+    .source!;
+  assert.equal(result.selection, "This exact item");
+  assert.equal(result.viewportText, "Current section");
+  assert.equal(result.captureMode, "picked");
+  assert.equal(result.transcriptPartial, true);
+});
+test("escaped and multibyte selection metadata cannot exceed the request budget", () => {
+  const text = "\u0000旅".repeat(20000);
+  const source: Source = {
+    title: text,
+    url: "https://example.org/" + text,
+    description: text,
+    text,
+    selection: text,
+    viewportText: text,
+    selectionContext: text,
+    selectionLabel: text,
+    capturedAt: "now",
+    transcript: [],
+    transcriptStatus: "not-video",
+  };
+  const p = makePact(text, source);
+  p.messages = [{ id: "m", role: "user", text, at: "now" }];
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(interpretationContext(p))) <= 240000,
+  );
+});

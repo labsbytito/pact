@@ -11,39 +11,154 @@ type Caller = (
   name: string,
   args: Record<string, unknown>,
 ) => Promise<ToolReply>;
-const file = new URL("../.local/fo-threads.json", import.meta.url);
-let threads: Record<string, string> = {};
-try {
-  threads = JSON.parse(await readFile(file, "utf8"));
-} catch {}
-async function remember(pactId: string, id: string) {
-  threads[pactId] = id;
-  await mkdir(new URL("../.local/", import.meta.url), {
-    recursive: true,
-    mode: 0o700,
-  });
-  const temp = new URL(
-    `fo-threads.${randomUUID()}.tmp`,
-    new URL("../.local/", import.meta.url),
-  );
-  await writeFile(temp, JSON.stringify(threads), { mode: 0o600 });
-  await rename(temp, file);
-}
-function decoded(reply: ToolReply): Record<string, any> {
-  if (reply.structuredContent && typeof reply.structuredContent === "object")
-    return reply.structuredContent as Record<string, any>;
-  const text = Array.isArray(reply.content)
-    ? reply.content
-        .filter((x) => x?.type === "text")
-        .map((x) => x.text ?? "")
-        .join("\n")
-    : "";
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { response: text };
+export type FoStatus = "complete" | "failed" | "needs_answer";
+
+// Per-Pact Fo conversation handles. Private: never returned to the client or logged.
+export class Threads {
+  private map: Record<string, string> = {};
+  private writing: Promise<void> = Promise.resolve();
+  // Bumped whenever all handles are dropped, so an in-flight ask cannot re-save a handle afterwards.
+  epoch = 0;
+  private constructor(private directory: URL) {}
+  static async open(directory: URL) {
+    const threads = new Threads(directory);
+    try {
+      const saved = JSON.parse(
+        await readFile(new URL("fo-threads.json", directory), "utf8"),
+      );
+      if (saved && typeof saved === "object")
+        for (const [k, v] of Object.entries(saved))
+          if (typeof v === "string") threads.map[k] = v;
+    } catch {}
+    return threads;
+  }
+  get(pactId: string) {
+    return Object.hasOwn(this.map, pactId) ? this.map[pactId] : undefined;
+  }
+  private persist() {
+    const w = this.writing
+      .catch(() => {})
+      .then(async () => {
+        await mkdir(this.directory, { recursive: true, mode: 0o700 });
+        const temp = new URL(`fo-threads.${randomUUID()}.tmp`, this.directory);
+        await writeFile(temp, JSON.stringify(this.map), { mode: 0o600 });
+        await rename(temp, new URL("fo-threads.json", this.directory));
+      });
+    this.writing = w;
+    return w;
+  }
+  async remember(pactId: string, id: string, epoch: number) {
+    if (epoch !== this.epoch || this.get(pactId) === id) return;
+    this.map[pactId] = id;
+    await this.persist();
+  }
+  async forget(pactId: string) {
+    if (this.get(pactId) === undefined) return;
+    delete this.map[pactId];
+    await this.persist();
+  }
+  async forgetAll() {
+    this.epoch++;
+    this.map = {};
+    await this.persist();
   }
 }
+
+const KEYS = [
+  "status",
+  "response",
+  "reply",
+  "answer",
+  "error",
+  "conversationId",
+  "conversation_id",
+  "conversations",
+  "turns",
+];
+const WRAPPERS = ["structuredContent", "result", "data", "output"];
+const isObject = (v: unknown): v is Record<string, any> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+const meaningful = (v: unknown) =>
+  isObject(v) && KEYS.some((k) => v[k] !== undefined);
+// Accepts a bare object, a JSON string, or the same wrapped one or two levels deep.
+function unwrap(v: unknown, depth = 0): Record<string, any> | undefined {
+  if (typeof v === "string" && /^\s*[{]/.test(v)) {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!isObject(v) || depth > 3) return undefined;
+  if (meaningful(v)) return v;
+  for (const key of WRAPPERS) {
+    const inner = unwrap(v[key], depth + 1);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+function textOf(v: unknown): string | undefined {
+  const s = typeof v === "string" ? v : isObject(v) ? v.message : undefined;
+  return typeof s === "string" && s.trim() ? s : undefined;
+}
+export function decodeFoReply(reply: ToolReply): Record<string, any> {
+  const text = Array.isArray(reply?.content)
+    ? reply.content
+        .filter((x) => x?.type === "text" && typeof x.text === "string")
+        .map((x) => x.text)
+        .join("\n")
+    : "";
+  const data =
+    unwrap(reply?.structuredContent) ??
+    unwrap(text) ??
+    (text.trim() && !/^\s*[{[]/.test(text) ? { response: text } : {});
+  const out = { ...data };
+  if (reply?.isError === true && out.status === undefined)
+    out.status = "failed";
+  if (reply?.isError === true && textOf(out.response) === undefined) {
+    const fallback = textOf(out.error) ?? (text.trim() || undefined);
+    if (fallback) out.response = fallback;
+  }
+  return out;
+}
+const status = (v: unknown) =>
+  typeof v === "string" ? v.trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
+const WORKING = new Set([
+  "working",
+  "running",
+  "pending",
+  "queued",
+  "in_progress",
+  "processing",
+  "started",
+]);
+const DONE = new Set(["complete", "completed", "done", "success", "succeeded"]);
+const FAILED = new Set([
+  "failed",
+  "error",
+  "errored",
+  "cancelled",
+  "canceled",
+  "rejected",
+]);
+const ASKING = new Set([
+  "needs_input",
+  "needs_user_input",
+  "needs_answer",
+  "needs_clarification",
+  "awaiting_user",
+  "awaiting_input",
+  "awaiting_answer",
+  "waiting_for_user",
+  "waiting_for_input",
+  "input_required",
+  "requires_input",
+]);
+const BUDGET =
+  /\b(insufficient|exhausted|out of|no (?:remaining |more )?|run out of)\s*(credits?|balance|budget|funds|grant)|\b(credits?|budget|quota|usage limit|grant)\b.{0,40}\b(exhausted|exceeded|reached|depleted|insufficient|used up)/i;
+const uncertain = (why: string) =>
+  new Error(`${why} Check Fo activity before trying again.`);
+
 export async function settleFo(
   call: Caller,
   name: string,
@@ -54,72 +169,133 @@ export async function settleFo(
     onConversation?: (id: string) => Promise<void>;
   } = {},
 ) {
+  // Errors from this first call propagate untouched: a typed "not submitted" error stays definite.
   let reply = await call(name, args);
-  let data = decoded(reply);
+  let data = decodeFoReply(reply);
+  let id: string | undefined =
+    typeof args.conversationId === "string" ? args.conversationId : undefined;
+  let announced: string | undefined;
+  const learn = async () => {
+    const found = data.conversationId ?? data.conversation_id;
+    if (typeof found === "string" && found) id = found;
+    if (id && id !== announced && id !== args.conversationId) {
+      announced = id;
+      try {
+        await options.onConversation?.(id);
+      } catch {}
+    }
+  };
+  await learn();
   let polls = 0;
-  if (typeof data.conversationId === "string")
-    await options.onConversation?.(data.conversationId);
-  while (data.status === "working") {
+  while (WORKING.has(status(data.status))) {
     if (++polls > (options.maxPolls ?? 15))
-      throw new Error(
-        "Fo is still working. Check Fo activity before trying again.",
+      throw uncertain("Fo is still working.");
+    if (!id)
+      throw uncertain("Fo returned progress without a conversation handle.");
+    try {
+      await options.onProgress?.(
+        textOf(data.progress) ?? "Fo is working on your request.",
       );
-    const id = data.conversationId;
-    if (typeof id !== "string")
-      throw new Error("Fo returned progress without a conversation handle.");
-    await options.onProgress?.(
-      typeof data.progress === "string"
-        ? data.progress
-        : "Fo is working on your request.",
-    );
-    reply = await call("get_fo_reply", { conversationId: id, waitSeconds: 40 });
-    data = decoded(reply);
+    } catch {}
+    try {
+      reply = await call("get_fo_reply", {
+        conversationId: id,
+        waitSeconds: 40,
+      });
+    } catch {
+      // The request was already accepted, so a later transport or disconnect error is uncertain, never a clean failure.
+      throw uncertain("Fo stopped answering after accepting the request.");
+    }
+    data = decodeFoReply(reply);
+    await learn();
   }
+  const s = status(data.status);
+  if (s && !DONE.has(s) && !FAILED.has(s) && !ASKING.has(s))
+    throw uncertain("Fo returned a status Pact does not recognize.");
   const response =
-    typeof data.response === "string"
-      ? data.response
-      : typeof data.error === "string"
-        ? data.error
-        : undefined;
+    textOf(data.response) ??
+    textOf(data.reply) ??
+    textOf(data.answer) ??
+    textOf(data.error);
+  const turns = Array.isArray(data.turns)
+    ? data.turns
+        .filter((t: any) => isObject(t) && typeof t.text === "string")
+        .map((t: any) => `${t.role ?? "fo"}: ${t.text}`)
+        .join("\n")
+    : "";
   // Internal conversation handles are never rendered in the client or public trace.
   const text =
     response ??
     (Array.isArray(data.conversations)
       ? `Fo returned ${data.conversations.length} conversation records. Open Fo to view them.`
-      : Array.isArray(data.turns)
-        ? data.turns.map((t: any) => `${t.role}: ${t.text}`).join("\n")
-        : "Fo returned a response. Check Fo activity for its details.");
+      : turns || undefined);
+  const failed = reply?.isError === true || FAILED.has(s);
+  if (!text && !failed)
+    throw uncertain("Fo returned no readable reply.");
+  const shown = text ?? "Fo reported an error without details.";
+  const result: FoStatus = failed
+    ? "failed"
+    : ASKING.has(s)
+      ? "needs_answer"
+      : "complete";
   return {
-    isError: reply.isError === true || data.status === "failed",
-    content: [{ type: "text", text }],
-    structuredContent: { status: data.status ?? "complete" },
+    isError: failed,
+    content: [{ type: "text", text: shown }],
+    structuredContent: {
+      status: result,
+      ...(failed && BUDGET.test(shown) ? { reason: "budget" } : {}),
+    },
   };
 }
-let queue: Promise<unknown> = Promise.resolve();
-export function runFoAction(
-  name: string,
-  args: Record<string, unknown>,
-  pactId?: string,
-  onProgress?: (text: string) => Promise<void>,
-) {
-  const execute = () => {
-    let parameters = args;
-    if (name === "ask_fo" && pactId)
-      parameters = threads[pactId]
-        ? { message: args.message, conversationId: threads[pactId] }
-        : { message: args.message, newConversation: true };
-    return settleFo(
-      async (n, a) => (await callFo(n, a)) as ToolReply,
-      name,
-      parameters,
-      {
+
+export function createFoRunner(deps: { call: Caller; threads: Threads }) {
+  let queue: Promise<unknown> = Promise.resolve();
+  return function run(
+    name: string,
+    args: Record<string, unknown>,
+    pactId?: string,
+    onProgress?: (text: string) => Promise<void>,
+  ) {
+    const execute = async () => {
+      let parameters = args;
+      const epoch = deps.threads.epoch;
+      if (name === "ask_fo" && pactId) {
+        // The approved message is sent as-is; the Pact's own handle decides the conversation, never a model-supplied id.
+        const { conversationId: _a, newConversation: _b, ...rest } = args;
+        const id = deps.threads.get(pactId);
+        parameters = id
+          ? { ...rest, conversationId: id }
+          : { ...rest, newConversation: true };
+      }
+      const result = await settleFo(deps.call, name, parameters, {
         onProgress,
-        onConversation: pactId ? (id) => remember(pactId, id) : undefined,
-      },
-    );
+        onConversation: pactId
+          ? (id) => deps.threads.remember(pactId, id, epoch)
+          : undefined,
+      });
+      // A definite "unknown conversation" failure drops the stale handle; nothing is retried automatically.
+      if (
+        pactId &&
+        result.isError &&
+        /conversation/i.test(result.content[0]?.text ?? "") &&
+        /not found|no such|unknown|invalid|expired/i.test(
+          result.content[0]?.text ?? "",
+        )
+      )
+        await deps.threads.forget(pactId).catch(() => {});
+      return result;
+    };
+    // Fo asks must settle before another ask starts, so a follow-up always sees the previous handle.
+    const next = queue.then(execute);
+    queue = next.catch(() => {});
+    return next;
   };
-  // Fo asks must settle before another ask starts. Each Pact keeps a private thread handle.
-  const run = queue.then(execute);
-  queue = run.catch(() => {});
-  return run;
 }
+
+const threads = await Threads.open(new URL("../.local/", import.meta.url));
+export const runFoAction = createFoRunner({
+  call: async (n, a) => (await callFo(n, a)) as ToolReply,
+  threads,
+});
+// Called on disconnect or when a new Fo sign-in begins, so another account never inherits a conversation.
+export const forgetFoThreads = () => threads.forgetAll();
