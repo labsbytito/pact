@@ -1,5 +1,7 @@
 import type { Source } from "./model";
+import { pageAccess } from "./page-access";
 import { createInjectedPageReader, type CaptureMode } from "./page-reader";
+export { pageAccess };
 const readInjectedPage = createInjectedPageReader();
 export type SelectionRequest = {
   id: string;
@@ -12,31 +14,8 @@ export type SelectionRequest = {
 };
 const PROTECTED_PAGE =
   "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.";
-
-// Ordinary http(s) pages can be read from the side panel. Everything else is
-// restricted: missing URLs, non-web schemes, and the Chrome Web Store (https,
-// but Chrome refuses extension scripts there).
-export function pageAccess(
-  url: string | undefined | null,
-): "web" | "restricted" {
-  if (!url) return "restricted";
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return "restricted";
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-    return "restricted";
-  const host = parsed.hostname.replace(/\.$/, "").toLowerCase();
-  if (host === "chromewebstore.google.com") return "restricted";
-  if (
-    host === "chrome.google.com" &&
-    /^\/webstore(?:\/|$)/i.test(parsed.pathname)
-  )
-    return "restricted";
-  return "web";
-}
+const PAGE_NOT_VISIBLE =
+  "Click Pact’s toolbar icon on this page, then choose Read current page or Select item.";
 
 function scriptingDenied(message: string) {
   return /cannot be scripted|extensions gallery|cannot access a chrome|cannot access (?:a |an )?edge:|chrome-extension:\/\//i.test(
@@ -116,7 +95,10 @@ export async function capturePage(
       "The active tab changed. Click Pact’s toolbar icon on the page you want to share.",
     );
   // pendingUrl only fills in while the committed url is still empty (navigation).
+  // A missing URL means this extension cannot see the page yet. That is an
+  // unread site, separate from chrome:// and the Chrome Web Store.
   const address = tab.url || tab.pendingUrl || "";
+  if (!address) throw new Error(PAGE_NOT_VISIBLE);
   if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
   if (request && !samePage(request.url, address))
     throw new Error("The selected page changed. Select the text again.");

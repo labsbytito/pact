@@ -63,7 +63,7 @@ The real interface sent reviewed public research to Fo, displayed the returned B
 
 Caption extraction depends on YouTube availability and page structure. Missing speech is disclosed. The companion's tool list reflects what the linked Fo account exposes; it does not guarantee bookings, payments or messaging work. A Fo reply is displayed as a reply, not proof that every requested task completed. Interrupted actions are never retried automatically.
 
-The current local prototype is single-user. Chrome permissions include `activeTab`, `scripting`, `storage`, `sidePanel`, `identity`, and `contextMenus`, plus host access to ordinary `http` and `https` pages. A side-panel click does not grant `activeTab`, so that host access is what lets Select item read the page the user asked to share. No browsing-history (`tabs`) permission is requested. Chrome still blocks `chrome://` pages and the Chrome Web Store. Page context is shared with Claude when a message is sent; Fo receives an approved task. Direct web content is treated as untrusted context.
+The current local prototype is single-user. Chrome permissions at install are `activeTab`, `scripting`, `storage`, `sidePanel`, `identity`, `contextMenus`, and the local companion at `127.0.0.1:4317`. Ordinary `http` and `https` access is optional: Read current page or Select item asks for the current site only, and Settings can revoke those sites. `activeTab` still covers a toolbar click and a selection from the context menu. No browsing-history (`tabs`) permission is requested. Chrome still blocks `chrome://` pages and the Chrome Web Store. Page context is shared with Claude when a message is sent; Fo receives an approved task. Direct web content is treated as untrusted context.
 
 ## Verify
 

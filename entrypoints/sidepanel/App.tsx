@@ -46,6 +46,14 @@ import {
 import type { CaptureMode } from "../../lib/page-reader";
 import { api, interpret, ApiError, type Health } from "../../lib/api";
 import Companion from "./Companion";
+import { SiteAccessSettings } from "./SiteAccess";
+import {
+  rememberInvocation,
+  rememberObservedUrl,
+  rememberedSitePattern,
+  requestSiteRead,
+  SITE_ACCESS_DENIED,
+} from "../../lib/site-access";
 import { withCharacterSeeds } from "../../lib/character";
 // Render links as React nodes: captured/returned text never becomes HTML.
 function LinkedText({ text }: { text: string }) {
@@ -283,10 +291,19 @@ export default function App() {
     const invoked = (event: {
       type?: string;
       windowId?: number;
+      tabId?: number;
+      origin?: string;
       selection?: SelectionRequest;
     }) => {
       if (event.type !== "pact-invocation" && event.type !== "pact-selection")
         return;
+      if (event.selection)
+        rememberInvocation({
+          tabId: event.selection.tabId,
+          url: event.selection.url,
+        });
+      else
+        rememberInvocation({ tabId: event.tabId, origin: event.origin });
       void chrome.windows.getCurrent().then((window) => {
         const targetWindow = event.selection?.windowId ?? event.windowId;
         if (targetWindow !== window.id) return;
@@ -313,6 +330,21 @@ export default function App() {
       });
     };
     chrome.runtime.onMessage.addListener(invoked);
+    void chrome.windows.getCurrent().then(async (window) => {
+      const stored = await chrome.storage.session.get([
+        `pactInvocation:${window.id}`,
+        "pactInvocation",
+      ]);
+      const invocation = (stored[`pactInvocation:${window.id}`] ??
+        stored.pactInvocation) as
+        | { tabId?: number; origin?: string }
+        | undefined;
+      if (invocation)
+        rememberInvocation({
+          tabId: invocation.tabId,
+          origin: invocation.origin,
+        });
+    });
     return () => chrome.runtime.onMessage.removeListener(invoked);
   }, [selected]);
   useEffect(() => {
@@ -327,6 +359,7 @@ export default function App() {
         setPageStale(true);
     };
     const changed = (id: number, info: { url?: string; status?: string }) => {
+      if (info.url) rememberObservedUrl(id, info.url);
       if (
         currentSource?.tabId === id &&
         (info.url || info.status === "loading")
@@ -425,6 +458,19 @@ export default function App() {
     setView("chat");
     setDraft("");
     setError("");
+  }
+  function readFromPanel(mode: CaptureMode = "page") {
+    // requestSiteRead runs before capture's awaits so this click stays the gesture.
+    void requestSiteRead(rememberedSitePattern()).then(
+      (granted) => {
+        if (!granted) {
+          setError(SITE_ACCESS_DENIED);
+          return;
+        }
+        void capture(mode);
+      },
+      (error) => setError(errorText(error)),
+    );
   }
   async function capture(mode: CaptureMode = "page") {
     initialCaptureAllowed.current = false;
@@ -965,7 +1011,7 @@ export default function App() {
                     <button
                       className={`capture-card ${currentSource ? "captured" : ""}`}
                       onClick={() =>
-                        currentSource ? setSourceOpen(true) : void capture()
+                        currentSource ? setSourceOpen(true) : readFromPanel()
                       }
                       disabled={capturing}
                     >
@@ -1276,7 +1322,7 @@ export default function App() {
               <div className="page-controls" aria-label="Page context controls">
                 <button
                   className="text-button"
-                  onClick={() => void capture("page")}
+                  onClick={() => readFromPanel("page")}
                   disabled={capturing}
                 >
                   <RotateCcw size={14} />
@@ -1284,7 +1330,7 @@ export default function App() {
                 </button>
                 <button
                   className="text-button"
-                  onClick={() => void capture("pick")}
+                  onClick={() => readFromPanel("pick")}
                   disabled={capturing}
                 >
                   <MousePointer2 size={14} />
@@ -1353,7 +1399,7 @@ export default function App() {
                     className="icon-button"
                     title="Add current page"
                     aria-label="Add current page"
-                    onClick={() => void capture("page")}
+                    onClick={() => readFromPanel("page")}
                     disabled={capturing}
                   >
                     {capturing ? (
@@ -1575,6 +1621,7 @@ export default function App() {
                     <span>{companionOnline ? "Running" : "Offline"}</span>
                   </div>
                 </div>
+                <SiteAccessSettings />
                 <div className="privacy-footnote">
                   <ShieldCheck size={18} />
                   <p>
@@ -1682,7 +1729,7 @@ export default function App() {
                 </details>
                 <button
                   className="secondary full"
-                  onClick={() => void capture("page")}
+                  onClick={() => readFromPanel("page")}
                 >
                   Refresh from current page
                 </button>

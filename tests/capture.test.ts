@@ -226,10 +226,19 @@ test("a loading tab is judged by pendingUrl only while the committed url is empt
   assert.equal((await capturePage("pick")).tabId, 4);
   assert.equal(state.executions, 1);
 });
+test("a page whose URL is hidden asks for a toolbar click and is not called protected", async (t) => {
+  for (const tabUrl of [null, ""]) {
+    const state = setup(t, { tabUrl });
+    await assert.rejects(capturePage("pick"), (error: Error) => {
+      assert.match(error.message, /toolbar icon/);
+      assert.equal(/protects this page/.test(error.message), false);
+      return true;
+    });
+    assert.equal(state.executions, 0, String(tabUrl));
+  }
+});
 test("select item shows the protected-page message only for genuinely restricted pages", async (t) => {
-  const blocked: (string | null)[] = [
-    null,
-    "",
+  const blocked = [
     "chrome://newtab/",
     "chrome-extension://abcdefghijklmnop/panel.html",
     "edge://settings/",
