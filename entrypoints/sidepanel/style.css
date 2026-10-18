@@ -1109,6 +1109,111 @@ a {
 .mic-button.active {
   color: var(--toggle-on);
 }
+.stop-button {
+  background: var(--text) !important;
+}
+.attach-menu {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 8px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--shadow-pop);
+}
+.attach-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--t-callout);
+  color: var(--text);
+  text-align: left;
+}
+.attach-menu button:hover {
+  background: var(--surface-2);
+}
+.voice-chip.status {
+  color: var(--text-2);
+}
+.message {
+  position: relative;
+}
+.message-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--d-fast) var(--ease-std);
+  margin-top: 4px;
+}
+.message-row:hover .message-actions,
+.message-row:focus-within .message-actions,
+.reply-block:hover .message-actions,
+.reply-block:focus-within .message-actions {
+  opacity: 1;
+}
+.reply-block.streaming .md-body::after {
+  content: "▍";
+  display: inline-block;
+  width: 0.45em;
+  margin-left: 2px;
+  background: var(--text-2);
+  animation: voice-pulse 1s steps(1) infinite;
+  border-radius: 1px;
+  vertical-align: text-bottom;
+  height: 1em;
+}
+.stopped-label {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: var(--t-caption);
+  color: var(--text-3);
+}
+.md-body {
+  font-size: inherit;
+  line-height: 1.55;
+}
+.md-body .md-p {
+  margin: 0 0 0.55em;
+}
+.md-body .md-p:last-child {
+  margin-bottom: 0;
+}
+.md-body .md-list {
+  margin: 0.2em 0 0.55em;
+  padding-left: 1.2em;
+}
+.md-body .md-heading {
+  margin: 0.4em 0 0.35em;
+  font-size: 1.05em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.md-body .md-quote {
+  margin: 0.4em 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--hairline-strong);
+  color: var(--text-2);
+}
+.md-body .md-code {
+  margin: 0.4em 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  overflow: auto;
+  font-size: var(--t-caption);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.md-inline-code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-size: 0.92em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
 .composer textarea {
   order: 2;
   flex: 1 1 auto;

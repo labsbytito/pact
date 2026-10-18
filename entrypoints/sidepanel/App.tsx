@@ -27,6 +27,12 @@ import {
   SlidersHorizontal,
   Info,
   Unplug,
+  Square,
+  Copy,
+  CheckCheck,
+  RefreshCw,
+  Pencil,
+  Camera,
 } from "lucide-react";
 import type {
   Action,
@@ -51,12 +57,21 @@ import {
   type SelectionRequest,
 } from "../../lib/capture";
 import type { CaptureMode } from "../../lib/page-reader";
-import { api, interpret, ApiError, type Health } from "../../lib/api";
+import {
+  api,
+  interpretLive,
+  AbortInterpretError,
+  ApiError,
+  type Health,
+} from "../../lib/api";
 import {
   ATTACHMENT_LIMITS,
   prepareAttachment,
+  prepareScreenshotAttachment,
   type Attachment,
 } from "../../lib/attachments";
+import { renderMarkdown } from "../../lib/markdown";
+import { isImageMime } from "../../lib/images";
 import Companion from "./Companion";
 import {
   withCharacterSeeds,
@@ -142,27 +157,34 @@ function LinkedText({ text }: { text: string }) {
   nodes.push(text.slice(previous));
   return <>{nodes}</>;
 }
-// An explicitly labelled excerpt, never a generated summary. Expanding restores the original verbatim.
-function ReadableReply({ text }: { text: string }) {
+function ReadableReply({
+  text,
+  streaming = false,
+  stopped = false,
+}: {
+  text: string;
+  streaming?: boolean;
+  stopped?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const long = text.length > 600;
+  const [copied, setCopied] = useState(false);
+  const long = !streaming && text.length > 600;
   const boundary = text.lastIndexOf(" ", 420);
   let end = boundary > 240 ? boundary : 420;
-  // A clipped URL must never become a different, clickable source.
   for (const token of text.matchAll(
     /\[[^\]\n]+\]\(https?:\/\/[^\s<>]+\)|https?:\/\/[^\s<>]+/g,
   ))
     if (token.index! < end && token.index! + token[0].length > end)
       end = token.index!;
   const excerpt = text.slice(0, end).trimEnd();
+  const display = long && !expanded ? `${excerpt}…` : text;
   return (
-    <>
+    <div className={`reply-block${streaming ? " streaming" : ""}`}>
       {long && !expanded && (
         <small className="reply-excerpt-label">Opening excerpt</small>
       )}
-      <p>
-        <LinkedText text={long && !expanded ? `${excerpt}…` : text} />
-      </p>
+      <div className="md-body">{renderMarkdown(display)}</div>
+      {stopped && <small className="stopped-label">Stopped</small>}
       {long && (
         <button
           className="text-button reply-disclosure"
@@ -170,10 +192,35 @@ function ReadableReply({ text }: { text: string }) {
           onClick={() => setExpanded(!expanded)}
         >
           {expanded ? "Show less" : "Read full reply"}
-          <ChevronRight size={13} />
+          <ChevronRight size={13} strokeWidth={ICON} />
         </button>
       )}
-    </>
+      {!streaming && text.trim() && (
+        <div className="message-actions">
+          <button
+            type="button"
+            className="icon-button"
+            title={copied ? "Copied" : "Copy"}
+            aria-label={copied ? "Copied" : "Copy reply"}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            {copied ? (
+              <CheckCheck size={14} strokeWidth={ICON} />
+            ) : (
+              <Copy size={14} strokeWidth={ICON} />
+            )}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 function RequestText({
@@ -243,6 +290,9 @@ export default function App() {
       useState<SettingsSection>("general"),
     [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]),
     [micGranted, setMicGranted] = useState(false),
+    [streamText, setStreamText] = useState(""),
+    [attachMenu, setAttachMenu] = useState(false),
+    [editingMessageId, setEditingMessageId] = useState<string>(),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [connecting, setConnecting] = useState(false),
@@ -257,6 +307,7 @@ export default function App() {
     );
   const dialog = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const interpretAbort = useRef<AbortController | null>(null);
   const initialCaptureAllowed = useRef(true);
   const captureGeneration = useRef(0),
     handledSelection = useRef<string | undefined>(undefined);
@@ -272,11 +323,26 @@ export default function App() {
   const darkScheme = effectiveDark(settings.theme, systemDark);
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
+  const searchNeedle = search.toLowerCase().trim();
+  const matchesSearch = (p: Pact) => {
+    if (!searchNeedle) return true;
+    if (`${p.title} ${p.intention}`.toLowerCase().includes(searchNeedle))
+      return true;
+    return p.messages.some((m) => m.text.toLowerCase().includes(searchNeedle));
+  };
   const visible = pacts.filter(
-    (p) =>
-      !!p.archived === archived &&
-      `${p.title} ${p.intention}`.toLowerCase().includes(search.toLowerCase()),
+    (p) => !!p.archived === archived && matchesSearch(p),
   );
+  const statusLabel = capturing
+    ? "Reading page…"
+    : busy && !streamText
+      ? "Thinking…"
+      : busy && streamText
+        ? "Writing…"
+        : active?.action?.status === "running" ||
+            active?.action?.status === "approved"
+          ? "Fo is working…"
+          : "";
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onScheme = () => setSystemDark(media.matches);
@@ -606,19 +672,73 @@ export default function App() {
   function removeAttachment(id: string) {
     setAttachments((list) => list.filter((item) => item.id !== id));
   }
-  async function send() {
-    if ((!draft.trim() && !attachments.length) || busy || capturing) return;
-    initialCaptureAllowed.current = false;
+  function stopInterpret() {
+    interpretAbort.current?.abort();
+  }
+  async function runInterpret(p: Pact, pending: Attachment[] = []) {
     setBusy(true);
+    setStreamText("");
     setError("");
+    const controller = new AbortController();
+    interpretAbort.current = controller;
+    let live = "";
+    try {
+      const result = await interpretLive(p, pending, {
+        signal: controller.signal,
+        onDelta: (chunk) => {
+          live += chunk;
+          setStreamText(live);
+        },
+      });
+      const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
+      await update(mergeReply(latest, result, uid(), now()));
+      await refreshHealth();
+    } catch (e) {
+      const partial =
+        e instanceof AbortInterpretError
+          ? e.partial.trim()
+          : live.trim();
+      if (e instanceof AbortInterpretError || (partial && controller.signal.aborted)) {
+        if (partial) {
+          const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
+          await update(
+            mergeReply(
+              latest,
+              { reply: partial, stopped: true },
+              uid(),
+              now(),
+            ),
+          );
+        }
+      } else {
+        if (partial) {
+          const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
+          await update(
+            mergeReply(latest, { reply: partial, stopped: true }, uid(), now()),
+          );
+        }
+        setError(errorText(e));
+      }
+    } finally {
+      interpretAbort.current = null;
+      setStreamText("");
+      setBusy(false);
+    }
+  }
+  async function send(overrideText?: string) {
     const text =
-      draft.trim() ||
+      (overrideText ?? draft).trim() ||
       (attachments.length
         ? `Look at the attached file${attachments.length > 1 ? "s" : ""}.`
         : "");
+    if ((!text && !attachments.length) || busy || capturing) return;
+    initialCaptureAllowed.current = false;
     const pending = attachments;
-    setDraft("");
-    setAttachments([]);
+    if (!overrideText) {
+      setDraft("");
+      setAttachments([]);
+      setEditingMessageId(undefined);
+    }
     let p: Pact;
     try {
       if (active?.action?.status === "proposed" && active.action.planId) {
@@ -637,35 +757,72 @@ export default function App() {
       }
       setView("chat");
       await onboard();
-      try {
-        const result = await interpret(p, pending);
-        const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
-        await update(mergeReply(latest, result, uid(), now()));
-        await refreshHealth();
-      } catch (e) {
-        setError(errorText(e));
-      }
+      await runInterpret(p, pending);
     } catch (e) {
       setDraft(text);
       setAttachments(pending);
       setError(errorText(e));
-    } finally {
       setBusy(false);
     }
   }
   async function retryAI() {
     if (!active || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await interpret(active);
-      const latest = pactsRef.current.find((p) => p.id === active.id);
-      if (latest) await update(mergeReply(latest, result, uid(), now()));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
+    const withoutLastAssistant = {
+      ...active,
+      messages: (() => {
+        const msgs = [...active.messages];
+        if (msgs.at(-1)?.role === "assistant") msgs.pop();
+        return msgs;
+      })(),
+    };
+    if (withoutLastAssistant.action?.status === "proposed") {
+      const cleared = supersedeProposal(withoutLastAssistant);
+      await update(cleared);
+      await runInterpret(cleared);
+      return;
     }
+    await update(withoutLastAssistant);
+    await runInterpret(withoutLastAssistant);
+  }
+  async function regenerate() {
+    if (!active || busy) return;
+    await retryAI();
+  }
+  async function editAndResend(messageId: string) {
+    if (!active || busy) return;
+    const index = active.messages.findIndex((m) => m.id === messageId);
+    if (index < 0 || active.messages[index]?.role !== "user") return;
+    const target = active.messages[index]!;
+    setDraft(target.text);
+    setEditingMessageId(messageId);
+    setAttachments([]);
+    composer.current?.focus();
+  }
+  async function confirmEditResend() {
+    if (!active || !editingMessageId || busy) return;
+    const index = active.messages.findIndex((m) => m.id === editingMessageId);
+    if (index < 0) return;
+    const text = draft.trim();
+    if (!text) return;
+    if (active.action?.status === "proposed" && active.action.planId) {
+      await api("/actions/cancel", { planId: active.action.planId }).catch(
+        () => {},
+      );
+    }
+    const cut = supersedeProposal({
+      ...active,
+      messages: [
+        ...active.messages.slice(0, index),
+        message("user", text),
+      ],
+      intention: index === 0 ? text : active.intention,
+      title: index === 0 ? text.slice(0, 72) : active.title,
+    });
+    setDraft("");
+    setEditingMessageId(undefined);
+    setAttachments([]);
+    await update(cut);
+    await runInterpret(cut, []);
   }
   async function connectFo() {
     setConnecting(true);
@@ -936,11 +1093,22 @@ export default function App() {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
-      if (e.key === "Escape") closeDialog();
+      if (e.key === "Escape") {
+        if (busy) {
+          e.preventDefault();
+          stopInterpret();
+          return;
+        }
+        if (attachMenu) {
+          setAttachMenu(false);
+          return;
+        }
+        closeDialog();
+      }
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, []);
+  }, [busy, attachMenu]);
   if (!loaded)
     return (
       <div className="boot">
@@ -986,13 +1154,7 @@ export default function App() {
         <p className="recent-label">Recent</p>
         <div className="recent-list">
           {pacts
-            .filter(
-              (p) =>
-                !p.archived &&
-                `${p.title} ${p.intention}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-            )
+            .filter((p) => !p.archived && matchesSearch(p))
             .slice(0, 30)
             .map((p, i) => (
               <button
@@ -1305,22 +1467,64 @@ export default function App() {
                         <ChevronRight size={15} />
                       </button>
                     )}
-                    {active.messages.map((m) => (
-                      <div key={m.id} className={`message-row ${m.role}`}>
-                        <div className="message">
-                          {m.role === "assistant" ? (
-                            <ReadableReply text={m.text} />
-                          ) : (
-                            <p>{m.text}</p>
-                          )}
+                    {active.messages.map((m, index) => {
+                      const isLast = index === active.messages.length - 1;
+                      const lastUser = [...active.messages]
+                        .reverse()
+                        .find((x) => x.role === "user");
+                      return (
+                        <div key={m.id} className={`message-row ${m.role}`}>
+                          <div className="message">
+                            {m.role === "assistant" ? (
+                              <ReadableReply
+                                text={m.text}
+                                stopped={!!m.stopped}
+                              />
+                            ) : (
+                              <p>{m.text}</p>
+                            )}
+                            {!busy && (
+                              <div className="message-actions">
+                                {m.role === "assistant" && isLast && (
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    title="Regenerate"
+                                    aria-label="Regenerate reply"
+                                    onClick={() => void regenerate()}
+                                  >
+                                    <RefreshCw size={14} strokeWidth={ICON} />
+                                  </button>
+                                )}
+                                {m.role === "user" &&
+                                  lastUser?.id === m.id && (
+                                    <button
+                                      type="button"
+                                      className="icon-button"
+                                      title="Edit & resend"
+                                      aria-label="Edit and resend"
+                                      onClick={() => void editAndResend(m.id)}
+                                    >
+                                      <Pencil size={14} strokeWidth={ICON} />
+                                    </button>
+                                  )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {busy && (
                       <div className="message-row assistant">
-                        <div className="thinking-bubble" role="status">
-                          Thinking…
-                        </div>
+                        {streamText ? (
+                          <div className="message">
+                            <ReadableReply text={streamText} streaming />
+                          </div>
+                        ) : (
+                          <div className="thinking-bubble" role="status">
+                            Thinking…
+                          </div>
+                        )}
                       </div>
                     )}
                     {active.action && (
@@ -1540,8 +1744,19 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {(attachments.length > 0 || voice !== "idle") && (
+              {(statusLabel ||
+                attachments.length > 0 ||
+                voice !== "idle" ||
+                editingMessageId) && (
                 <div className="composer-meta" aria-live="polite">
+                  {statusLabel && (
+                    <span className="voice-chip status">{statusLabel}</span>
+                  )}
+                  {editingMessageId && (
+                    <span className="voice-chip action">
+                      Editing message · Enter to resend
+                    </span>
+                  )}
                   {voice === "listening" && (
                     <span className="voice-chip listening">Listening…</span>
                   )}
@@ -1590,6 +1805,47 @@ export default function App() {
                   e.target.value = "";
                 }}
               />
+              {attachMenu && (
+                <div className="attach-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAttachMenu(false);
+                      fileInput.current?.click();
+                    }}
+                  >
+                    <Paperclip size={15} strokeWidth={ICON} />
+                    Attach file
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAttachMenu(false);
+                      void (async () => {
+                        try {
+                          const shot = await prepareScreenshotAttachment();
+                          setAttachments((list) => {
+                            if (list.length >= ATTACHMENT_LIMITS.maxFiles) {
+                              setError(
+                                `You can attach up to ${ATTACHMENT_LIMITS.maxFiles} files.`,
+                              );
+                              return list;
+                            }
+                            return [...list, shot];
+                          });
+                        } catch (e) {
+                          setError(errorText(e));
+                        }
+                      })();
+                    }}
+                  >
+                    <Camera size={15} strokeWidth={ICON} />
+                    Attach screenshot of this page
+                  </button>
+                </div>
+              )}
               <div
                 className={`composer ${listening ? "listening" : ""}`}
                 onDragOver={(e) => {
@@ -1610,14 +1866,24 @@ export default function App() {
                       ? "Listening…"
                       : voice === "transcribing"
                         ? "Transcribing…"
-                        : active?.action?.status === "needs_answer"
-                          ? "Reply to Fo…"
-                          : "What do you want to get done?"
+                        : editingMessageId
+                          ? "Edit message…"
+                          : active?.action?.status === "needs_answer"
+                            ? "Reply to Fo…"
+                            : "What do you want to get done?"
                   }
                   value={draft}
                   maxLength={8000}
                   rows={1}
                   onChange={(e) => setDraft(e.target.value)}
+                  onPaste={(e) => {
+                    const files = Array.from(e.clipboardData.files).filter(
+                      (f) => isImageMime(f.type) || f.type.startsWith("image/"),
+                    );
+                    if (!files.length) return;
+                    e.preventDefault();
+                    void addFiles(files);
+                  }}
                   onKeyDown={(e) => {
                     if (
                       e.key === "Enter" &&
@@ -1625,16 +1891,18 @@ export default function App() {
                       !e.nativeEvent.isComposing
                     ) {
                       e.preventDefault();
-                      void send();
+                      if (editingMessageId) void confirmEditResend();
+                      else void send();
                     }
                   }}
                 />
                 <div className="composer-actions">
                   <button
                     className="icon-button"
-                    title="Attach file"
-                    aria-label="Attach file"
-                    onClick={() => fileInput.current?.click()}
+                    title="Attach"
+                    aria-label="Attach"
+                    aria-expanded={attachMenu}
+                    onClick={() => setAttachMenu((open) => !open)}
                     disabled={
                       busy || attachments.length >= ATTACHMENT_LIMITS.maxFiles
                     }
@@ -1649,6 +1917,7 @@ export default function App() {
                     }
                     aria-pressed={listening}
                     onClick={() => void dictate()}
+                    disabled={busy}
                   >
                     {listening ? (
                       <AudioLines size={20} strokeWidth={ICON} />
@@ -1656,20 +1925,31 @@ export default function App() {
                       <Mic size={19} strokeWidth={ICON} />
                     )}
                   </button>
-                  <button
-                    className="send-button"
-                    disabled={
-                      (!draft.trim() && !attachments.length) || busy || capturing
-                    }
-                    onClick={() => void send()}
-                    aria-label="Send message"
-                  >
-                    {busy ? (
-                      <Loader2 size={18} className="spin" strokeWidth={ICON} />
-                    ) : (
+                  {busy ? (
+                    <button
+                      className="send-button stop-button"
+                      onClick={stopInterpret}
+                      aria-label="Stop generating"
+                      title="Stop"
+                    >
+                      <Square size={14} strokeWidth={ICON} fill="currentColor" />
+                    </button>
+                  ) : (
+                    <button
+                      className="send-button"
+                      disabled={
+                        (!draft.trim() && !attachments.length) || capturing
+                      }
+                      onClick={() =>
+                        editingMessageId
+                          ? void confirmEditResend()
+                          : void send()
+                      }
+                      aria-label="Send message"
+                    >
                       <ArrowUp size={20} strokeWidth={ICON} />
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
               </div>
             </footer>

@@ -117,6 +117,7 @@ export function mergeReply(
   result: {
     reply: string;
     title?: string;
+    stopped?: boolean;
     action?: {
       title: string;
       instruction: string;
@@ -134,7 +135,13 @@ export function mergeReply(
     title: result.title ?? pact.title,
     messages: [
       ...pact.messages,
-      { id, at, role: "assistant" as const, text: result.reply },
+      {
+        id,
+        at,
+        role: "assistant" as const,
+        text: result.reply,
+        ...(result.stopped ? { stopped: true } : {}),
+      },
     ],
   };
   if (unresolved(pact.action)) return next;

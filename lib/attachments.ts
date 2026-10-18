@@ -1,4 +1,6 @@
-/** Client-side attachment prep for /interpret. No network I/O. */
+/** Client-side attachment prep for /interpret. No network I/O beyond local canvas. */
+
+import { encodeImageForModel, IMAGE_PIPELINE, isImageMime } from "./images";
 
 export type AttachmentKind = "text" | "image";
 
@@ -19,8 +21,9 @@ export type Attachment = {
 export const ATTACHMENT_LIMITS = {
   maxFiles: 3,
   maxTextBytes: 24_000,
-  maxImageBytes: 90_000,
-  maxImageEdge: 960,
+  maxImageBytes: IMAGE_PIPELINE.maxEncodedBytes,
+  maxImageEdge: IMAGE_PIPELINE.maxLongEdge,
+  maxInputBytes: IMAGE_PIPELINE.maxInputBytes,
   accept:
     "image/png,image/jpeg,image/webp,image/gif,text/plain,text/markdown,text/csv,application/json,.txt,.md,.csv,.json",
 } as const;
@@ -34,13 +37,16 @@ const TEXT_TYPES = new Set([
 
 export function isAllowedAttachment(file: File): boolean {
   if (TEXT_TYPES.has(file.type)) return true;
-  if (file.type.startsWith("image/")) return true;
+  if (isImageMime(file.type) || file.type.startsWith("image/")) return true;
   const name = file.name.toLowerCase();
   return /\.(txt|md|csv|json|png|jpe?g|webp|gif)$/.test(name);
 }
 
 function kindFor(file: File): AttachmentKind {
-  if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(file.name))
+  if (
+    file.type.startsWith("image/") ||
+    /\.(png|jpe?g|webp|gif)$/i.test(file.name)
+  )
     return "image";
   return "text";
 }
@@ -62,65 +68,12 @@ async function readTextFile(file: File): Promise<string> {
   return raw.slice(0, ATTACHMENT_LIMITS.maxTextBytes);
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Could not read that image."));
-    image.src = url;
-  });
-}
-
-async function readImageFile(file: File): Promise<{
-  data: string;
-  mime: string;
-  previewUrl: string;
-  size: number;
-}> {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await loadImage(objectUrl);
-    const scale = Math.min(
-      1,
-      ATTACHMENT_LIMITS.maxImageEdge / Math.max(image.width, image.height, 1),
-    );
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Could not prepare that image.");
-    ctx.drawImage(image, 0, 0, width, height);
-    let quality = 0.82;
-    let dataUrl = canvas.toDataURL("image/jpeg", quality);
-    while (
-      dataUrl.length > ATTACHMENT_LIMITS.maxImageBytes * 1.37 &&
-      quality > 0.45
-    ) {
-      quality -= 0.1;
-      dataUrl = canvas.toDataURL("image/jpeg", quality);
-    }
-    if (dataUrl.length > ATTACHMENT_LIMITS.maxImageBytes * 1.37)
-      throw new Error(
-        "That image is too large after compression. Try a smaller one.",
-      );
-    const data = dataUrl.slice(dataUrl.indexOf(",") + 1);
-    return {
-      data,
-      mime: "image/jpeg",
-      previewUrl: dataUrl,
-      size: Math.ceil((data.length * 3) / 4),
-    };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 /** Turn a File into a compact attachment ready for /interpret. */
 export async function prepareAttachment(file: File): Promise<Attachment> {
   if (!isAllowedAttachment(file))
     throw new Error("Pact accepts images and text files (txt, md, csv, json).");
+  if (file.size > ATTACHMENT_LIMITS.maxInputBytes)
+    throw new Error("That file is larger than 10MB.");
   const kind = kindFor(file);
   const id = crypto.randomUUID();
   if (kind === "text") {
@@ -134,12 +87,29 @@ export async function prepareAttachment(file: File): Promise<Attachment> {
       text,
     };
   }
-  const image = await readImageFile(file);
+  const image = await encodeImageForModel(file);
   return {
     id,
     name: file.name.slice(0, 120),
     mime: image.mime,
     kind,
+    size: image.size,
+    data: image.data,
+    previewUrl: image.previewUrl,
+  };
+}
+
+/** Capture the visible tab, downscale, and return an image attachment. */
+export async function prepareScreenshotAttachment(): Promise<Attachment> {
+  if (typeof chrome === "undefined" || !chrome.tabs?.captureVisibleTab)
+    throw new Error("Screenshot needs the Pact extension in Chrome.");
+  const dataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
+  const image = await encodeImageForModel(dataUrl);
+  return {
+    id: crypto.randomUUID(),
+    name: "Page screenshot",
+    mime: image.mime,
+    kind: "image",
     size: image.size,
     data: image.data,
     previewUrl: image.previewUrl,

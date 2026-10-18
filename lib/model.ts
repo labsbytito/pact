@@ -23,6 +23,8 @@ export type Message = {
   role: "user" | "assistant";
   text: string;
   at: string;
+  /** User stopped generation; keep partial text. */
+  stopped?: boolean;
 };
 export type Action = {
   id: string;

@@ -17,6 +17,15 @@ export default defineConfig({
     ],
     host_permissions: ["http://127.0.0.1:4317/*"],
     action: { default_title: "Make a Pact" },
+    commands: {
+      open_pact: {
+        suggested_key: {
+          default: "Alt+Shift+P",
+          mac: "Alt+Shift+P",
+        },
+        description: "Open Pact side panel",
+      },
+    },
     icons: {
       16: "icon/16.png",
       32: "icon/32.png",
