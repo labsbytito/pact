@@ -1,5 +1,6 @@
 import type { Source } from "./model";
-import { readPageSnapshot, type CaptureMode } from "./page-reader";
+import { createInjectedPageReader, type CaptureMode } from "./page-reader";
+const readInjectedPage = createInjectedPageReader();
 export type SelectionRequest = {
   id: string;
   tabId: number;
@@ -9,6 +10,40 @@ export type SelectionRequest = {
   at: number;
   frameId?: number;
 };
+const PROTECTED_PAGE =
+  "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.";
+
+// Ordinary http(s) pages can be read from the side panel. Everything else is
+// restricted: missing URLs, non-web schemes, and the Chrome Web Store (https,
+// but Chrome refuses extension scripts there).
+export function pageAccess(
+  url: string | undefined | null,
+): "web" | "restricted" {
+  if (!url) return "restricted";
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "restricted";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+    return "restricted";
+  const host = parsed.hostname.replace(/\.$/, "").toLowerCase();
+  if (host === "chromewebstore.google.com") return "restricted";
+  if (
+    host === "chrome.google.com" &&
+    /^\/webstore(?:\/|$)/i.test(parsed.pathname)
+  )
+    return "restricted";
+  return "web";
+}
+
+function scriptingDenied(message: string) {
+  return /cannot be scripted|extensions gallery|cannot access a chrome|cannot access (?:a |an )?edge:|chrome-extension:\/\//i.test(
+    message,
+  );
+}
+
 export function samePage(left: string, right: string) {
   try {
     const a = new URL(left),
@@ -80,17 +115,16 @@ export async function capturePage(
     throw new Error(
       "The active tab changed. Click Pact’s toolbar icon on the page you want to share.",
     );
-  if (!tab.url || !/^https?:/.test(tab.url))
-    throw new Error(
-      "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.",
-    );
-  if (request && !samePage(request.url, tab.url))
+  // pendingUrl only fills in while the committed url is still empty (navigation).
+  const address = tab.url || tab.pendingUrl || "";
+  if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
+  if (request && !samePage(request.url, address))
     throw new Error("The selected page changed. Select the text again.");
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: target.tabId },
       world: "MAIN",
-      func: readPageSnapshot,
+      func: readInjectedPage,
       args: [mode, request?.text ?? ""],
     });
     const value = results[0]?.result as
@@ -116,6 +150,7 @@ export async function capturePage(
       /cancelled|timed out|changed|Highlight text|no readable text/.test(text)
     )
       throw new Error(text);
+    if (scriptingDenied(text)) throw new Error(PROTECTED_PAGE);
     throw new Error(
       "Chrome could not read this page. Click Pact’s toolbar icon on this tab, then try Read current page again.",
     );

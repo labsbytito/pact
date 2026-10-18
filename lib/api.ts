@@ -51,6 +51,7 @@ export type Health = {
     };
   };
   fo: boolean;
+  needsReconnect?: boolean;
   tools: { name: string; description?: string }[];
 };
 export type Interpretation = {
@@ -63,6 +64,7 @@ export type Interpretation = {
     toolName: string;
     arguments: Record<string, unknown>;
     expiresAt?: string;
+    consequential?: boolean;
   };
 };
 export const interpret = (pact: Pact) =>

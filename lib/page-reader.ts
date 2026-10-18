@@ -1,9 +1,12 @@
+import { captionKit, type CaptionApi } from "./captions";
 import type { Source } from "./model";
 export type CaptureMode = "page" | "selection" | "pick";
-// Self-contained: Chrome serializes this function into the invoked page.
+// Chrome serializes this function into the page. Caption helpers arrive as `caps`
+// from createInjectedPageReader so the pot/transcript fallback is the tested one.
 export async function readPageSnapshot(
   mode: CaptureMode = "page",
   suppliedSelection = "",
+  caps?: CaptionApi,
 ): Promise<Source | { captureError: string }> {
   try {
     const initialUrl = location.href;
@@ -309,109 +312,91 @@ export async function readPageSnapshot(
         visited >= 18000 ||
         visibleLength >= 14000 ||
         articleText.length >= 32000,
-      videoTime: isYoutube ? video?.currentTime : undefined,
+      videoTime: isYoutube ? undefined : video?.currentTime,
       transcript: [],
       transcriptStatus: isYoutube ? "unavailable" : "not-video",
     };
-    if (isYoutube) {
-      const videoId =
-        url.searchParams.get("v") ??
-        url.pathname.split("/shorts/")[1]?.split("/")[0];
-      type Player = {
-        videoDetails?: { videoId: string };
-        captions?: {
-          playerCaptionsTracklistRenderer?: {
-            captionTracks?: { baseUrl: string; languageCode: string }[];
-          };
-        };
-      };
-      const playerElement = document.getElementById("movie_player") as
-        (HTMLElement & { getPlayerResponse?: () => Player }) | null;
-      const player =
-        playerElement?.getPlayerResponse?.() ??
-        (window as unknown as { ytInitialPlayerResponse?: Player })
-          .ytInitialPlayerResponse;
-      // Never use a previous video's player response after YouTube SPA navigation.
-      if (videoId && player && player.videoDetails?.videoId === videoId) {
-        try {
-          const tracks =
-            player.captions?.playerCaptionsTracklistRenderer?.captionTracks ??
-            [];
-          const track =
-            tracks.find(
-              (t) =>
-                t.languageCode === document.documentElement.lang.split("-")[0],
-            ) ??
-            tracks.find((t) => t.languageCode === "en") ??
-            tracks[0];
-          if (track) {
-            const endpoint = new URL(track.baseUrl);
-            endpoint.searchParams.set("fmt", "json3");
-            if (
-              endpoint.protocol === "https:" &&
-              /(^|\.)youtube\.com$/.test(endpoint.hostname)
-            ) {
-              const response = await fetch(endpoint, {
-                signal: AbortSignal.timeout(8000),
-              });
-              if (response.ok) {
-                const body = await response.json();
-                source.transcript = (body.events ?? [])
-                  .filter((e: any) => Array.isArray(e.segs))
-                  .map((e: any) => ({
-                    start: (e.tStartMs ?? 0) / 1000,
-                    text: clean(e.segs.map((s: any) => s.utf8 ?? "").join("")),
-                  }))
-                  .filter((e: any) => e.text && Number.isFinite(e.start));
+    if (isYoutube && caps) {
+      try {
+        const loaded = await caps.loadYoutubeCaptions({
+          href: initialUrl,
+          lang: document.documentElement?.lang || "",
+          viewportHeight: innerHeight,
+          document,
+          initialPlayerResponse: (
+            globalThis as { ytInitialPlayerResponse?: unknown }
+          ).ytInitialPlayerResponse as
+            | {
+                videoDetails?: { videoId?: string };
+                captions?: {
+                  playerCaptionsTracklistRenderer?: {
+                    captionTracks?: { baseUrl?: string; languageCode?: string }[];
+                  };
+                };
               }
+            | undefined,
+          now: () => Date.now(),
+          wait: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+          fetch: (captionUrl: string) =>
+            fetch(captionUrl, {
+              credentials: "include",
+              signal: AbortSignal.timeout(8000),
+            }),
+          performance: {
+            getEntriesByType: (type: string) =>
+              performance
+                .getEntriesByType(type)
+                .map((entry) => ({ name: entry.name })),
+          },
+          patchNetwork: (onUrl: (seen: string) => void) => {
+            const originalFetch = globalThis.fetch;
+            const xhr = (
+              globalThis as { XMLHttpRequest?: { prototype: { open: (...args: any[]) => unknown } } }
+            ).XMLHttpRequest;
+            const originalOpen = xhr?.prototype?.open;
+            globalThis.fetch = function (this: unknown, input: any, init?: any) {
+              try {
+                const seen =
+                  typeof input === "string"
+                    ? input
+                    : input instanceof URL
+                      ? input.href
+                      : input?.url;
+                if (seen) onUrl(String(seen));
+              } catch {
+                /* Observing a player request must not break it. */
+              }
+              return originalFetch.call(this, input, init);
+            } as typeof fetch;
+            if (xhr && originalOpen) {
+              xhr.prototype.open = function (
+                this: unknown,
+                method: string,
+                requestUrl: string | URL,
+                ...rest: any[]
+              ) {
+                try {
+                  onUrl(String(requestUrl));
+                } catch {
+                  /* Observing a player request must not break it. */
+                }
+                return originalOpen.apply(this, [method, requestUrl, ...rest]);
+              };
             }
-          }
-        } catch {
-          /* Speech is unavailable unless real captions were read. */
-        }
-        if (
-          !source.transcript.length &&
-          document
-            .querySelector("ytd-watch-flexy")
-            ?.getAttribute("video-id") === videoId
-        ) {
-          source.transcript = Array.from(
-            document.querySelectorAll("ytd-transcript-segment-renderer"),
-          )
-            .map((row) => ({
-              start: (
-                row.querySelector(".segment-timestamp")?.textContent?.trim() ??
-                "0"
-              )
-                .split(":")
-                .reduce((n, v) => n * 60 + Number(v), 0),
-              text: clean(
-                row.querySelector(".segment-text")?.textContent ?? "",
-              ),
-            }))
-            .filter((row) => row.text && Number.isFinite(row.start));
-        }
+            return () => {
+              globalThis.fetch = originalFetch;
+              if (xhr && originalOpen) xhr.prototype.open = originalOpen;
+            };
+          },
+        });
+        if (typeof loaded.videoTime === "number")
+          source.videoTime = loaded.videoTime;
+        source.transcript = loaded.transcript;
+        source.transcriptPartial = loaded.transcriptPartial;
+        source.transcriptStatus = loaded.transcriptStatus;
+      } catch {
+        /* Speech is unavailable unless real captions were read. */
       }
-      let budget = 100000;
-      const sorted = [...source.transcript].sort(
-        (a, b) =>
-          Math.abs(a.start - (source.videoTime ?? 0)) -
-          Math.abs(b.start - (source.videoTime ?? 0)),
-      );
-      const retained: Source["transcript"] = [];
-      for (const line of sorted) {
-        if (retained.length >= 2000 || budget <= 0) break;
-        const text = line.text.slice(0, Math.min(1000, budget));
-        budget -= text.length;
-        retained.push({ ...line, text });
-      }
-      source.transcriptPartial =
-        retained.length < source.transcript.length ||
-        source.transcript.some((x) => x.text.length > 1000);
-      source.transcript = retained.sort((a, b) => a.start - b.start);
-      source.transcriptStatus = source.transcript.length
-        ? "available"
-        : "unavailable";
     }
     if (location.href !== initialUrl)
       throw new Error(
@@ -426,4 +411,21 @@ export async function readPageSnapshot(
         error instanceof Error ? error.message : "The page could not be read.",
     };
   }
+}
+export function createInjectedPageReader(): (
+  mode: CaptureMode,
+  suppliedSelection: string,
+) => Promise<Source | { captureError: string }> {
+  // tsx/esbuild names nested functions with a `__name` helper that does not
+  // exist in the page world. Define it inside the injected function.
+  const body =
+    "var __name = (target) => target;\nconst caps = (" +
+    captionKit.toString() +
+    ")();\nreturn (" +
+    readPageSnapshot.toString() +
+    ")(mode, suppliedSelection, caps);";
+  return new Function("mode", "suppliedSelection", body) as (
+    mode: CaptureMode,
+    suppliedSelection: string,
+  ) => Promise<Source | { captureError: string }>;
 }

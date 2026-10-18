@@ -198,7 +198,8 @@ export default function App() {
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [connecting, setConnecting] = useState(false),
-    [authUrl, setAuthUrl] = useState<string>();
+    [authUrl, setAuthUrl] = useState<string>(),
+    [callConfirmed, setCallConfirmed] = useState(false);
   const dialog = useRef<HTMLElement>(null);
   const initialCaptureAllowed = useRef(true);
   const captureGeneration = useRef(0),
@@ -557,6 +558,7 @@ export default function App() {
       await update({ ...pact, action });
       const result = await api<{ runId: string }>("/actions/approve", {
         planId: action.planId,
+        ...(action.consequential ? { confirmConsequential: true } : {}),
       });
       await update({
         ...pact,
@@ -696,6 +698,7 @@ export default function App() {
     setSettingsOpen(false);
     setSourceOpen(false);
     setReviewOpen(false);
+    setCallConfirmed(false);
   };
   useEffect(() => {
     function key(e: KeyboardEvent) {
@@ -1121,7 +1124,8 @@ export default function App() {
                                 Date.parse(active.action.expiresAt) < Date.now()
                                   ? void retryAI()
                                   : health.fo
-                                    ? setReviewOpen(true)
+                                    ? (setCallConfirmed(false),
+                                      setReviewOpen(true))
                                     : setSettingsOpen(true)
                               }
                             >
@@ -1130,7 +1134,9 @@ export default function App() {
                                 ? "Refresh next step"
                                 : health.fo
                                   ? "Review next step"
-                                  : "Connect Fo to continue"}
+                                  : health.needsReconnect
+                                    ? "Reconnect Fo to continue"
+                                    : "Connect Fo to continue"}
                               <ArrowUpRight size={18} />
                             </button>
                           </>
@@ -1448,7 +1454,9 @@ export default function App() {
                       <small>
                         {health.fo
                           ? "Connected to your Wajo account"
-                          : "Real-world actions through your account"}
+                          : health.needsReconnect
+                            ? "Fo’s sign-in expired. Reconnect to send actions."
+                            : "Real-world actions through your account"}
                       </small>
                     </span>
                     <span
@@ -1493,7 +1501,7 @@ export default function App() {
                       {connecting ? (
                         <Loader2 className="spin" size={17} />
                       ) : null}
-                      Connect Fo
+                      {health.needsReconnect ? "Reconnect Fo" : "Connect Fo"}
                       <ArrowUpRight size={18} />
                     </button>
                   )}
@@ -1626,9 +1634,9 @@ export default function App() {
                     )}
                     {currentSource.transcriptStatus === "unavailable" ? (
                       <p>
-                        Pact can see the page information, but hasn’t read the
-                        video’s speech. Open YouTube’s transcript, then capture
-                        the page again—or tell Pact what caught your eye.
+                        Pact can see the page information, but this video’s
+                        captions aren’t available. Tell Pact what caught your
+                        eye.
                       </p>
                     ) : (
                       currentSource.transcript
@@ -1698,9 +1706,27 @@ export default function App() {
                   account. Fo may use your connected services. Review the
                   recipient and details carefully.
                 </p>
+                {active.action.consequential && (
+                  <>
+                    <p className="setting-description">
+                      This can place a real phone call or use an unfamiliar Fo
+                      tool. Confirm it separately before sending.
+                    </p>
+                    <button
+                      className="secondary full"
+                      onClick={() => setCallConfirmed(true)}
+                    >
+                      {callConfirmed
+                        ? "Separate confirmation recorded"
+                        : "Confirm this consequential action"}
+                    </button>
+                  </>
+                )}
                 <button
                   className="primary full"
-                  disabled={busy}
+                  disabled={
+                    busy || (!!active.action.consequential && !callConfirmed)
+                  }
                   onClick={execute}
                 >
                   Approve &amp; send to Fo
