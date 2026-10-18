@@ -84,8 +84,7 @@ import {
 } from "../../lib/attachments";
 import { renderMarkdown } from "../../lib/markdown";
 import { isImageMime } from "../../lib/images";
-import Companion, { type PactBlobHandle, type BlobState } from "./Companion";
-import { shouldGreet } from "./pactBlob";
+import Companion from "./Companion";
 import {
   withCharacterSeeds,
   DEFAULT_COMPANION,
@@ -325,9 +324,6 @@ export default function App() {
     [showSkeleton, setShowSkeleton] = useState(false),
     [uiReady, setUiReady] = useState(false),
     [menuExiting, setMenuExiting] = useState(false),
-    [blobMood, setBlobMood] = useState<BlobState>("idle"),
-    [composerFocused, setComposerFocused] = useState(false),
-    [activityEpoch, setActivityEpoch] = useState(0),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [healthChecked, setHealthChecked] = useState(false),
@@ -354,41 +350,11 @@ export default function App() {
     end = useRef<HTMLDivElement>(null),
     pactsRef = useRef(pacts),
     speech = useRef<any>(null),
-    writeQueue = useRef(Promise.resolve()),
-    heroBlob = useRef<PactBlobHandle>(null),
-    moodTimer = useRef(0);
+    writeQueue = useRef(Promise.resolve());
   const listening = voice === "listening" || voice === "transcribing";
   const darkScheme = effectiveDark(settings.theme, systemDark);
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
-  const bumpActivity = () => setActivityEpoch((n) => n + 1);
-  const blobLook = composerFocused
-    ? { x: 0, y: 3 }
-    : undefined;
-  const blobCaption =
-    capturing
-      ? "Reading page…"
-      : busy && !streamText
-        ? "Thinking…"
-        : busy && streamText
-          ? "Writing…"
-          : listening
-            ? "Listening…"
-            : "";
-  const liveBlobState: BlobState =
-    blobMood === "greeting" ||
-    blobMood === "happy" ||
-    blobMood === "error" ||
-    blobMood === "sleepy" ||
-    blobMood === "still"
-      ? blobMood
-      : listening
-        ? "listening"
-        : capturing || (busy && !streamText)
-          ? "thinking"
-          : busy && streamText
-            ? "speaking"
-            : "idle";
   const libraryGroups = groupLibraryPacts(pacts, sections, {
     archived,
     query: search,
@@ -701,51 +667,6 @@ export default function App() {
     const timer = window.setTimeout(() => setUiReady(true), 400);
     return () => window.clearTimeout(timer);
   }, [loaded, showSkeleton, uiReady]);
-  useEffect(() => {
-    if (!uiReady) return;
-    let cancelled = false;
-    void shouldGreet().then((greet) => {
-      if (cancelled || !greet) return;
-      setBlobMood("greeting");
-      window.clearTimeout(moodTimer.current);
-      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 900);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uiReady]);
-  useEffect(() => {
-    const onActivity = () => {
-      bumpActivity();
-      setBlobMood((m) => (m === "sleepy" || m === "still" ? "idle" : m));
-    };
-    window.addEventListener("pointerdown", onActivity, { passive: true });
-    window.addEventListener("keydown", onActivity);
-    return () => {
-      window.removeEventListener("pointerdown", onActivity);
-      window.removeEventListener("keydown", onActivity);
-    };
-  }, []);
-  useEffect(() => {
-    if (busy || listening || capturing) return;
-    const stillT = window.setTimeout(() => {
-      setBlobMood((m) =>
-        m === "greeting" || m === "happy" || m === "error" ? m : "still",
-      );
-    }, 60_000);
-    const sleepT = window.setTimeout(() => setBlobMood("sleepy"), 300_000);
-    return () => {
-      window.clearTimeout(stillT);
-      window.clearTimeout(sleepT);
-    };
-  }, [activityEpoch, busy, listening, capturing]);
-  useEffect(() => {
-    if (error) {
-      setBlobMood("error");
-      window.clearTimeout(moodTimer.current);
-      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 1900);
-    }
-  }, [error]);
   function closeMenu() {
     if (!menu || menuExiting) return;
     setMenuExiting(true);
@@ -930,16 +851,11 @@ export default function App() {
         onDelta: (chunk) => {
           live += chunk;
           setStreamText(live);
-          heroBlob.current?.pulse();
-          bumpActivity();
         },
       });
       const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
       await update(mergeReply(latest, result, uid(), now()));
       await refreshHealth();
-      setBlobMood("happy");
-      window.clearTimeout(moodTimer.current);
-      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 700);
     } catch (e) {
       const partial =
         e instanceof AbortInterpretError ? e.partial.trim() : live.trim();
@@ -963,11 +879,6 @@ export default function App() {
           setError("Stopped before a reply started.");
       } else {
         setError(errorText(e));
-      }
-      if (!(e instanceof AbortInterpretError && e.userInitiated)) {
-        setBlobMood("error");
-        window.clearTimeout(moodTimer.current);
-        moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 1900);
       }
     } finally {
       interpretAbort.current = null;
@@ -1466,19 +1377,7 @@ export default function App() {
                         className="recent"
                         onClick={() => openPact(p)}
                       >
-                        <span className="recent-avatar">
-                          <Companion
-                            seed={p.characterSeed ?? p.id}
-                            size="tiny"
-                            lively={false}
-                          />
-                        </span>
-                        <span className="recent-copy">
-                          <strong className="recent-title">{p.title}</strong>
-                          <span className="recent-preview">
-                            {p.messages.at(-1)?.text ?? p.intention}
-                          </span>
-                        </span>
+                        <strong className="recent-title">{p.title}</strong>
                         <time className="recent-meta">
                           {new Date(p.updatedAt).toLocaleDateString(undefined, {
                             month: "short",
@@ -1525,7 +1424,7 @@ export default function App() {
         </div>
       </aside>
       <main className="main-pane">
-        <header className={`topbar frosted${scrolledMain ? " scrolled" : ""}`}>
+        <header className={`topbar${scrolledMain ? " frosted" : ""}`}>
           <button
             className="mobile-brand"
             onClick={newPact}
@@ -1541,7 +1440,6 @@ export default function App() {
               appearance={companion}
               dark={darkScheme}
               size="tiny"
-              lively={false}
             />
             <span>pact.</span>
           </button>
@@ -1552,9 +1450,6 @@ export default function App() {
                   <Companion
                     seed={active.characterSeed ?? active.id}
                     size="small"
-                    state={liveBlobState}
-                    look={blobLook}
-                    lively
                   />
                 </span>
                 <span>
@@ -1706,26 +1601,14 @@ export default function App() {
                             className="pact-tile"
                             onClick={() => openPact(p)}
                           >
-                            <span className="recent-avatar">
-                              <Companion
-                                seed={p.characterSeed ?? p.id}
-                                size="tiny"
-                                lively={false}
-                              />
-                            </span>
-                            <span className="recent-copy">
-                              <strong className="recent-title">
-                                {p.pinned ? (
-                                  <>
-                                    <Pin size={12} strokeWidth={ICON} />{" "}
-                                  </>
-                                ) : null}
-                                {p.title}
-                              </strong>
-                              <span className="recent-preview">
-                                {p.messages.at(-1)?.text ?? p.intention}
-                              </span>
-                            </span>
+                            <strong className="recent-title">
+                              {p.pinned ? (
+                                <>
+                                  <Pin size={12} strokeWidth={ICON} />{" "}
+                                </>
+                              ) : null}
+                              {p.title}
+                            </strong>
                             <time className="recent-meta">
                               {new Date(p.updatedAt).toLocaleDateString(
                                 undefined,
@@ -1816,26 +1699,9 @@ export default function App() {
                 {!active ? (
                   <section className="welcome">
                     <div className="hello">
-                      <Companion
-                        appearance={companion}
-                        dark={darkScheme}
-                        size="hero"
-                        state={liveBlobState}
-                        look={blobLook}
-                        caption={blobCaption || undefined}
-                        blobRef={heroBlob}
-                        lively
-                      />
                       <div className="hello-copy">
                         <h1>What should we get done on this page?</h1>
                         <p>Read the page, or just ask.</p>
-                        <button
-                          type="button"
-                          className="hello-edit"
-                          onClick={openCompanionEditor}
-                        >
-                          Customize companion
-                        </button>
                       </div>
                     </div>
                     <button
@@ -2114,7 +1980,7 @@ export default function App() {
               </div>
             </div>
             <footer
-              className={`composer-region frosted${scrolledComposer ? " scrolled" : ""}`}
+              className={`composer-region${scrolledComposer ? " frosted" : ""}`}
             >
               {toast && (
                 <div className="undo-toast" role="status" aria-live="polite">
@@ -2362,15 +2228,7 @@ export default function App() {
                   value={draft}
                   maxLength={8000}
                   rows={1}
-                  onFocus={() => {
-                    setComposerFocused(true);
-                    bumpActivity();
-                  }}
-                  onBlur={() => setComposerFocused(false)}
-                  onChange={(e) => {
-                    setDraft(e.target.value);
-                    bumpActivity();
-                  }}
+                  onChange={(e) => setDraft(e.target.value)}
                   onPaste={(e) => {
                     const files = Array.from(e.clipboardData.files).filter(
                       (f) => isImageMime(f.type) || f.type.startsWith("image/"),
@@ -2380,7 +2238,6 @@ export default function App() {
                     void addFiles(files);
                   }}
                   onKeyDown={(e) => {
-                    bumpActivity();
                     if (
                       e.key === "Enter" &&
                       !e.shiftKey &&
@@ -2644,7 +2501,6 @@ export default function App() {
                 <div className="settings-pane">
                   {settingsSection === "general" && (
                     <>
-                      <h3 className="settings-pane-title">General</h3>
                       <p className="settings-group-label">Appearance</p>
                       <div className="settings-card">
                         <label className="settings-row">
@@ -2732,7 +2588,6 @@ export default function App() {
                   )}
                   {settingsSection === "companion" && (
                     <>
-                      <h3 className="settings-pane-title">Companion</h3>
                       <p className="settings-group-label">Account</p>
                       <div className="settings-card account-card">
                         <div className="account-row">
@@ -2766,7 +2621,6 @@ export default function App() {
                   )}
                   {settingsSection === "fo" && (
                     <>
-                      <h3 className="settings-pane-title">Fo</h3>
                       <p className="settings-group-label">Connection</p>
                       <div className="settings-card">
                         <div className="account-row">
@@ -2843,7 +2697,6 @@ export default function App() {
                   )}
                   {settingsSection === "privacy" && (
                     <>
-                      <h3 className="settings-pane-title">Privacy</h3>
                       <p className="settings-group-label">What’s shared</p>
                       <div className="settings-card">
                         <div className="settings-row stacked">
@@ -2875,7 +2728,6 @@ export default function App() {
                   )}
                   {settingsSection === "about" && (
                     <>
-                      <h3 className="settings-pane-title">About</h3>
                       <p className="settings-group-label">Pact</p>
                       <div className="settings-card">
                         <div className="settings-row">
