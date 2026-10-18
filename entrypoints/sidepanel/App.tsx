@@ -21,8 +21,6 @@ import {
   Paperclip,
   AudioLines,
   ShieldCheck,
-  Compass,
-  BookOpen,
   MapPin,
   MoreHorizontal,
   MousePointer2,
@@ -712,7 +710,7 @@ export default function App() {
       </div>
     );
   return (
-    <div className="app-shell">
+    <div className={`app-shell${active && view === "chat" ? " in-thread" : ""}`}>
       <aside className="sidebar">
         <a
           className="wordmark"
@@ -956,8 +954,10 @@ export default function App() {
                   <section className="welcome">
                     <div className="hello">
                       <Companion size="hero" />
-                      <h1>Hi, I’m Pact.</h1>
-                      <p>Bring me a page, or just a thought.</p>
+                      <div className="hello-copy">
+                        <h1>Hi, I’m Pact.</h1>
+                        <p>Bring me a page, or just a thought.</p>
+                      </div>
                     </div>
                     <button
                       className={`capture-card ${currentSource ? "captured" : ""}`}
@@ -993,36 +993,38 @@ export default function App() {
                     </button>
                     {currentSource ? (
                       <div
-                        className="suggestions"
+                        className="suggestions choice-card"
                         aria-label="Ways to use this page"
                       >
-                        {[
+                        <h2 className="choice-question">
+                          What do you want to do with this page?
+                        </h2>
+                        {(
                           [
-                            "Help me understand this page.",
-                            "Understand this page",
-                            BookOpen,
-                          ],
-                          [
-                            "Help me turn what caught my attention on this page into a practical next step.",
-                            "Find a next step",
-                            Compass,
-                          ],
-                        ].map(([prompt, label, Icon]) => {
-                          const ItemIcon = Icon as typeof BookOpen;
-                          return (
-                            <button
-                              key={String(label)}
-                              onClick={() => {
-                                setDraft(String(prompt));
-                                composer.current?.focus();
-                              }}
-                            >
-                              <ItemIcon size={17} />
-                              <span>{String(label)}</span>
-                              <ArrowUpRight size={15} />
-                            </button>
-                          );
-                        })}
+                            [
+                              "Help me understand this page.",
+                              "Understand this page",
+                            ],
+                            [
+                              "Help me turn what caught my attention on this page into a practical next step.",
+                              "Find a next step",
+                            ],
+                          ] as const
+                        ).map(([prompt, label], index) => (
+                          <button
+                            key={label}
+                            className="choice-option"
+                            onClick={() => {
+                              setDraft(prompt);
+                              composer.current?.focus();
+                            }}
+                          >
+                            <span className="choice-letter" aria-hidden="true">
+                              {String.fromCharCode(65 + index)}
+                            </span>
+                            <span>{label}</span>
+                          </button>
+                        ))}
                       </div>
                     ) : (
                       <p className="welcome-hint">
