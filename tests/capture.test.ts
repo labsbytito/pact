@@ -264,6 +264,26 @@ test("select item shows the protected-page message only for genuinely restricted
   await assert.rejects(capturePage("pick"), /Chrome protects this page/);
   assert.equal(state.executions, 0);
 });
+test("a pdf is reported directly and is not injected", async (t) => {
+  for (const tabUrl of [
+    "https://example.org/files/notes.pdf",
+    "https://example.org/files/notes.PDF",
+    "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+  ]) {
+    const state = setup(t, { tabUrl });
+    await assert.rejects(capturePage("pick"), /PDF viewer/);
+    assert.equal(state.executions, 0, tabUrl);
+  }
+});
+test("a missing host permission asks for one-click access instead of an empty read", async (t) => {
+  const { chrome } = setup(t);
+  chrome.scripting.executeScript = async () => {
+    throw new Error(
+      'Cannot access contents of url "https://example.org/current". Extension manifest must request permission to access this host.',
+    );
+  };
+  await assert.rejects(capturePage("pick"), /permission to read this site/);
+});
 test("a gallery or chrome scripting refusal stays the protected-page message", async (t) => {
   const { chrome } = setup(t);
   chrome.scripting.executeScript = async () => {

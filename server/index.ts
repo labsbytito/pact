@@ -20,6 +20,11 @@ import {
   decideTool,
   toolSendBlock,
 } from "./fo-policy";
+import {
+  companionStartupLine,
+  foLoginFrom,
+  keyPresent,
+} from "./health-line";
 const app = express();
 app.disable("x-powered-by");
 const allowed = new Set([
@@ -63,9 +68,25 @@ app.use(express.json({ limit: "300kb" }));
 const actions = await ActionStore.load(
   new URL("../.local/actions.json", import.meta.url),
 );
-app.get("/health", (_req, res) =>
-  res.json({ ai: aiReady(), aiStatus: aiStatus(), ...foStatus() }),
-);
+app.get("/health", (_req, res) => {
+  const ai = aiStatus();
+  const fo = foStatus();
+  const present = keyPresent();
+  const foLogin = foLoginFrom(!!fo.fo, !!fo.needsReconnect);
+  res.json({
+    ai: aiReady(),
+    aiStatus: ai,
+    keyPresent: present,
+    model: ai.model,
+    foLogin,
+    line: companionStartupLine({
+      keyPresent: present,
+      model: ai.model,
+      foLogin,
+    }),
+    ...fo,
+  });
+});
 app.post("/fo/connect", async (_req, res, next) => {
   try {
     // A fresh sign-in may be a different account, so no earlier Fo conversation carries over.
@@ -365,6 +386,15 @@ app.use(
   },
 );
 app.listen(4317, "127.0.0.1", () => {
-  console.log("Pact companion listening on http://127.0.0.1:4317");
-  void restoreFo();
+  void restoreFo().finally(() => {
+    const ai = aiStatus();
+    const fo = foStatus();
+    console.log(
+      companionStartupLine({
+        keyPresent: keyPresent(),
+        model: ai.model,
+        foLogin: foLoginFrom(!!fo.fo, !!fo.needsReconnect),
+      }),
+    );
+  });
 });

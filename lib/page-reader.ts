@@ -11,6 +11,156 @@ export async function readPageSnapshot(
   try {
     const initialUrl = location.href;
     const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+    const amount = () => clean(document.body?.textContent || "").length;
+    const queryAll = (
+      root: { querySelectorAll?: (selector: string) => Iterable<Element> },
+      selector: string,
+    ) =>
+      typeof root?.querySelectorAll === "function"
+        ? Array.from(root.querySelectorAll(selector))
+        : [];
+    const shadowRoots = () => {
+      const roots: (Document | ShadowRoot)[] = [document];
+      for (let i = 0; i < roots.length && i < 100; i++)
+        for (const element of queryAll(roots[i]!, "*").slice(0, 12000))
+          if (element.shadowRoot && roots.length < 80)
+            roots.push(element.shadowRoot);
+      return roots;
+    };
+    const settleReadableContent = async () => {
+      if (typeof MutationObserver !== "function" || amount() > 500) return;
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          try {
+            observer.disconnect();
+          } catch {
+            /* The page may already have gone away. */
+          }
+          resolve();
+        };
+        const observer = new MutationObserver(() => {
+          if (amount() > 500) finish();
+        });
+        try {
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        } catch {
+          finish();
+          return;
+        }
+        setTimeout(finish, 1500);
+      });
+    };
+    const blockText = () => {
+      const blocks: string[] = [];
+      const seen = new Set<Element>();
+      let length = 0;
+      for (const root of shadowRoots())
+        for (const el of queryAll(
+          root,
+          "article p, main p, p, h1, h2, h3, li, blockquote, pre",
+        ).slice(0, 500)) {
+          if (seen.has(el)) continue;
+          seen.add(el);
+          if (el.closest("nav,footer,aside,script,style,noscript")) continue;
+          const value = clean(el.textContent || "");
+          if (value.length < 30) continue;
+          blocks.push(value);
+          length += value.length;
+          if (length > 14000) return clean(blocks.join("\n")).slice(0, 14000);
+        }
+      return clean(blocks.join("\n")).slice(0, 14000);
+    };
+    const grabText = (selector: string, limit: number) => {
+      const found: string[] = [];
+      for (const root of shadowRoots()) {
+        for (const node of queryAll(root, selector)) {
+          if (found.length >= limit) return found;
+          const value = clean(node.textContent || "");
+          if (value.length > 1) found.push(value);
+        }
+      }
+      return found;
+    };
+    const siteSpecificText = () => {
+      const host = location.hostname;
+      if (/(^|\.)youtube\.com$/.test(host)) {
+        const description = grabText(
+          "#description-inline-expander, #attributed-snippet-text, ytd-text-inline-expander, ytd-watch-metadata #description, #description yt-formatted-string",
+          4,
+        );
+        const comments = grabText(
+          "ytd-comment-view-model #content-text, ytd-comment-thread-renderer #content-text, #content-text",
+          30,
+        );
+        return [
+          description.length ? `Description: ${description.join(" ")}` : "",
+          comments.length ? `Comments: ${comments.join(" · ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      if (/(^|\.)reddit\.com$/.test(host))
+        return [
+          grabText("shreddit-comment", 30).join("\n"),
+          grabText(".comment .usertext-body, .comment .md", 30).join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n");
+      if (/(^|\.)quora\.com$/.test(host))
+        return grabText(".q-text, .qu-userSelect--text", 20).join("\n");
+      if (/(^|\.)x\.com$/.test(host) || /(^|\.)twitter\.com$/.test(host))
+        return grabText("[data-testid='tweetText']", 20).join("\n");
+      if (/(^|\.)github\.com$/.test(host))
+        return grabText("article.markdown-body, #readme", 12).join("\n");
+      return "";
+    };
+    const consentNote = () => {
+      const dialog = document.querySelector(
+        "#onetrust-banner-sdk, [aria-label*='cookie' i], [aria-label*='consent' i]",
+      );
+      const value = clean(dialog?.textContent || "");
+      if (value.length < 40) return "";
+      return "A cookie or sign-in prompt is on this page. Pact did not accept it.";
+    };
+    const nudgeComments = async () => {
+      const host = location.hostname;
+      const mayHaveComments =
+        /(^|\.)youtube\.com$/.test(host) ||
+        /(^|\.)reddit\.com$/.test(host) ||
+        !!document.querySelector(
+          "ytd-comments, #comments, shreddit-comment-tree",
+        );
+      if (!mayHaveComments) return;
+      const scroller = document.scrollingElement;
+      if (!scroller) return;
+      const start = scroller.scrollTop;
+      const comments = () =>
+        document.querySelector(
+          "ytd-comments, #comments, shreddit-comment-tree",
+        );
+      try {
+        const first = comments();
+        if (first && typeof first.scrollIntoView === "function")
+          first.scrollIntoView({ block: "start" });
+        for (let step = 0; step < 4; step++) {
+          scroller.scrollTop = Math.min(
+            scroller.scrollHeight,
+            scroller.scrollTop + Math.max(innerHeight, 700),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (comments() && step >= 1) break;
+        }
+      } finally {
+        scroller.scrollTop = start;
+      }
+    };
     const blocked = (element: Element) =>
       !!element.closest(
         'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[data-pact-picker]',
@@ -116,15 +266,18 @@ export async function readPageSnapshot(
     }
     if (location.href !== initialUrl)
       throw new Error("The page changed. Read the current page again.");
-    const roots: (Document | ShadowRoot)[] = [document];
+    if (mode !== "pick") {
+      await settleReadableContent();
+      try {
+        await nudgeComments();
+      } catch {
+        /* A scroll that the page rejects should not hide text already on screen. */
+      }
+      if (location.href !== initialUrl)
+        throw new Error("The page changed. Read the current page again.");
+    }
     // Open shadow DOM contains the actual post text on modern Reddit and other sites.
-    for (let i = 0; i < roots.length && i < 60; i++)
-      for (const element of Array.from(roots[i]!.querySelectorAll("*")).slice(
-        0,
-        12000,
-      ))
-        if (element.shadowRoot && roots.length < 60)
-          roots.push(element.shadowRoot);
+    const roots = shadowRoots();
     const textOf = (element: Element): string => {
       if (blocked(element)) return "";
       const parts: string[] = [];
@@ -133,10 +286,7 @@ export async function readPageSnapshot(
       const subtrees: (Element | ShadowRoot)[] = [element];
       for (let i = 0; i < subtrees.length && i < 40 && length < 32000; i++) {
         const root = subtrees[i]!;
-        for (const host of [
-          root,
-          ...Array.from(root.querySelectorAll("*")).slice(0, 4000),
-        ])
+        for (const host of [root, ...queryAll(root, "*").slice(0, 4000)])
           if (host instanceof Element && host.shadowRoot && !blocked(host))
             subtrees.push(host.shadowRoot);
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -150,9 +300,7 @@ export async function readPageSnapshot(
           if (
             !parent ||
             blocked(parent) ||
-            parent.closest(
-              'script,style,noscript,nav,aside,footer,[aria-hidden="true"]',
-            )
+            parent.closest("script,style,noscript,nav,aside,footer")
           )
             continue;
           const value = clean(node.textContent ?? "");
@@ -250,10 +398,9 @@ export async function readPageSnapshot(
       'shreddit-post,article,[role="article"],[data-testid="post-container"],section,li',
     );
     const candidates = roots.flatMap((root) =>
-      Array.from(
-        root.querySelectorAll(
-          'shreddit-post,article,[role="article"],[data-testid="post-container"],main,[role="main"]',
-        ),
+      queryAll(
+        root,
+        'shreddit-post,article,[role="article"],[data-testid="post-container"],main,[role="main"]',
       ),
     );
     const score = (element: Element) => {
@@ -274,7 +421,16 @@ export async function readPageSnapshot(
       surrounding ??
       candidates.sort((a, b) => score(b) - score(a))[0] ??
       document.body;
-    const articleText = content ? textOf(content) : "";
+    let pageBody = content ? textOf(content) : "";
+    if (pageBody.length < 240) {
+      const blocks = blockText();
+      if (blocks.length > pageBody.length) pageBody = blocks;
+    }
+    const extra = siteSpecificText();
+    if (extra) pageBody = `${pageBody}\n\n${extra}`.trim().slice(0, 14000);
+    const wall = consentNote();
+    if (wall) pageBody = `${wall}\n\n${pageBody}`.trim();
+    const articleText = pageBody;
     const selectionContext = surrounding
       ? textOf(surrounding).slice(0, 6000)
       : pickedText.slice(0, 6000);

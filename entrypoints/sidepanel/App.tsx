@@ -271,7 +271,9 @@ export default function App() {
                 setClock(Date.now());
               }
             })
-            .catch(() => {})
+            .catch((e) => {
+              if (!cancelled) setError(errorText(e));
+            })
             .finally(() => {
               if (!cancelled) setCapturing(false);
             });
@@ -482,6 +484,13 @@ export default function App() {
     try {
       const page = await capturePage(mode);
       if (generation !== captureGeneration.current) return;
+      const thin =
+        `${page.text || ""}${page.selection || ""}`.trim().length < 80 &&
+        !(page.transcript?.length);
+      if (thin)
+        setError(
+          "Pact found almost no readable text. Use Allow this site if this page is not allowed yet, or scroll to the article and read again.",
+        );
       if (targetId) {
         const latest = pactsRef.current.find((p) => p.id === targetId);
         if (latest) {
@@ -914,6 +923,11 @@ export default function App() {
             </button>
           </div>
         </header>
+        <p className="setting-description" role="status">
+          {companionOnline
+            ? `Claude key ${health.keyPresent ? "present" : "missing"}, model ${health.model ?? health.aiStatus?.model ?? "none"}, Fo ${health.fo ? "signed in" : health.needsReconnect ? "needs reconnect" : "signed out"}`
+            : "Companion offline. Start it with pnpm run server."}
+        </p>
         {view === "library" ? (
           <section className="library">
             <h1>My Pacts</h1>
@@ -1289,6 +1303,16 @@ export default function App() {
                   >
                     <X size={17} />
                   </button>
+                  {/toolbar icon|Allow this site|permission to read this site|almost no readable text|PDF viewer/.test(
+                    error,
+                  ) && (
+                    <button
+                      className="text-button"
+                      onClick={() => readFromPanel(captureMode)}
+                    >
+                      Allow this site
+                    </button>
+                  )}
                   {active && !busy && (
                     <button className="text-button" onClick={retryAI}>
                       <RotateCcw size={14} /> Retry reply

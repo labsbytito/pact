@@ -1,6 +1,7 @@
 import type { Source } from "./model";
 import { pageAccess } from "./page-access";
 import { createInjectedPageReader, type CaptureMode } from "./page-reader";
+import { SITE_ACCESS_DENIED } from "./site-access";
 export { pageAccess };
 const readInjectedPage = createInjectedPageReader();
 export type SelectionRequest = {
@@ -16,6 +17,20 @@ const PROTECTED_PAGE =
   "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.";
 const PAGE_NOT_VISIBLE =
   "Click Pact’s toolbar icon on this page, then choose Read current page or Select item.";
+
+function isPdfAddress(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol === "chrome-extension:" &&
+      parsed.hostname === "mhjfbmdgcfjbbpaeojofohoefgiehjai"
+    )
+      return true;
+    return /\.pdf$/i.test(decodeURIComponent(parsed.pathname));
+  } catch {
+    return false;
+  }
+}
 
 function scriptingDenied(message: string) {
   return /cannot be scripted|extensions gallery|cannot access a chrome|cannot access (?:a |an )?edge:|chrome-extension:\/\//i.test(
@@ -99,6 +114,10 @@ export async function capturePage(
   // unread site, separate from chrome:// and the Chrome Web Store.
   const address = tab.url || tab.pendingUrl || "";
   if (!address) throw new Error(PAGE_NOT_VISIBLE);
+  if (isPdfAddress(address))
+    throw new Error(
+      "Chrome’s PDF viewer does not share the document text. Copy a passage and use Make a Pact from selection.",
+    );
   if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
   if (request && !samePage(request.url, address))
     throw new Error("The selected page changed. Select the text again.");
@@ -132,6 +151,12 @@ export async function capturePage(
       /cancelled|timed out|changed|Highlight text|no readable text/.test(text)
     )
       throw new Error(text);
+    if (
+      /manifest must request permission|does not have permission to access|cannot access contents of url/i.test(
+        text,
+      )
+    )
+      throw new Error(SITE_ACCESS_DENIED);
     if (scriptingDenied(text)) throw new Error(PROTECTED_PAGE);
     throw new Error(
       "Chrome could not read this page. Click Pact’s toolbar icon on this tab, then try Read current page again.",
