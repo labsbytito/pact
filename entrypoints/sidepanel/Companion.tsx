@@ -1,30 +1,60 @@
-import {
-  brandCharacter,
-  characterFor,
-  type CharacterSize,
-  type CharacterState,
-  type CompanionAppearance,
+import type { Ref } from "react";
+import PactBlob, {
+  type BlobState,
+  type PactBlobHandle,
+  type PactBlobProps,
+} from "./PactBlob";
+import type {
+  CharacterSize,
+  CharacterState,
+  CompanionAppearance,
 } from "../../lib/character";
 
 export type CompanionProps = {
   seed?: string;
-  size?: CharacterSize;
+  size?: CharacterSize | number;
+  /** @deprecated Prefer `state`. */
   thinking?: boolean;
-  state?: CharacterState;
-  /** When set (and no seed), renders the user's customized brand companion. */
+  state?: CharacterState | BlobState;
   appearance?: CompanionAppearance;
   dark?: boolean;
+  lively?: boolean;
+  look?: { x: number; y: number };
+  caption?: string;
+  blobRef?: Ref<PactBlobHandle>;
+  className?: string;
 };
 
-function resolveState(
+function mapState(
+  state: CharacterState | BlobState | undefined,
   thinking: boolean | undefined,
-  state: CharacterState | undefined,
-): CharacterState {
+): BlobState {
   if (thinking) return "thinking";
-  return state ?? "idle";
+  switch (state) {
+    case "working":
+      return "thinking";
+    case "streaming":
+      return "speaking";
+    case "attention":
+      return "listening";
+    case "done":
+      return "happy";
+    case "idle":
+    case "greeting":
+    case "listening":
+    case "thinking":
+    case "speaking":
+    case "happy":
+    case "error":
+    case "still":
+    case "sleepy":
+      return state;
+    default:
+      return "idle";
+  }
 }
 
-/** SVG companion — seed-derived for Pacts, or appearance for the brand mark. */
+/** Seed/appearance companion — animated via PactBlob when lively. */
 export default function Companion({
   seed,
   size = "normal",
@@ -32,64 +62,35 @@ export default function Companion({
   state,
   appearance,
   dark = false,
+  lively,
+  look,
+  caption,
+  blobRef,
+  className,
 }: CompanionProps) {
-  const character =
-    seed && seed.trim()
-      ? characterFor(seed)
-      : brandCharacter(appearance, dark);
-  const mood = resolveState(thinking, state);
-  const { eye } = character;
-  const rx = eye.width / 2;
-  const leftX = eye.cx - eye.gap / 2 - eye.width / 2 + eye.lookX;
-  const rightX = eye.cx + eye.gap / 2 - eye.width / 2 + eye.lookX;
-  const eyeY = eye.cy - eye.height / 2 + eye.lookY;
+  const life =
+    lively ??
+    (typeof size === "number"
+      ? size >= 48
+      : size === "hero" || size === "normal");
 
   return (
-    <span
-      className={`companion ${size} state-${mood}${mood === "thinking" ? " thinking" : ""}`}
-      data-shape={character.shape}
-      data-seed={character.seed}
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 72 72" fill="none" focusable="false">
-        <g
-          className="character-pose"
-          transform={`rotate(${character.tilt} 36 36)`}
-        >
-          <path
-            className="character-body"
-            d={character.path}
-            fill={character.color}
-          />
-          <g
-            className="character-eyes"
-            transform={`rotate(${eye.rotate} ${eye.cx + eye.lookX} ${eye.cy + eye.lookY})`}
-          >
-            <rect
-              className="character-eye"
-              x={leftX}
-              y={eyeY}
-              width={eye.width}
-              height={eye.height}
-              rx={rx}
-              ry={rx}
-            />
-            <rect
-              className="character-eye"
-              x={rightX}
-              y={eyeY}
-              width={eye.width}
-              height={eye.height}
-              rx={rx}
-              ry={rx}
-            />
-          </g>
-        </g>
-      </svg>
-    </span>
+    <PactBlob
+      ref={blobRef}
+      seed={seed}
+      appearance={appearance}
+      dark={dark}
+      size={size}
+      state={mapState(state, thinking)}
+      look={look}
+      caption={caption}
+      lively={life}
+      className={className}
+    />
   );
 }
 
+export type { PactBlobHandle, PactBlobProps, BlobState };
 export {
   characterFor,
   brandCharacter,

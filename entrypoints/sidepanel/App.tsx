@@ -84,7 +84,8 @@ import {
 } from "../../lib/attachments";
 import { renderMarkdown } from "../../lib/markdown";
 import { isImageMime } from "../../lib/images";
-import Companion from "./Companion";
+import Companion, { type PactBlobHandle, type BlobState } from "./Companion";
+import { shouldGreet } from "./pactBlob";
 import {
   withCharacterSeeds,
   DEFAULT_COMPANION,
@@ -324,6 +325,9 @@ export default function App() {
     [showSkeleton, setShowSkeleton] = useState(false),
     [uiReady, setUiReady] = useState(false),
     [menuExiting, setMenuExiting] = useState(false),
+    [blobMood, setBlobMood] = useState<BlobState>("idle"),
+    [composerFocused, setComposerFocused] = useState(false),
+    [activityEpoch, setActivityEpoch] = useState(0),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [healthChecked, setHealthChecked] = useState(false),
@@ -350,11 +354,53 @@ export default function App() {
     end = useRef<HTMLDivElement>(null),
     pactsRef = useRef(pacts),
     speech = useRef<any>(null),
-    writeQueue = useRef(Promise.resolve());
+    writeQueue = useRef(Promise.resolve()),
+    heroBlob = useRef<PactBlobHandle>(null),
+    moodTimer = useRef(0);
   const listening = voice === "listening" || voice === "transcribing";
   const darkScheme = effectiveDark(settings.theme, systemDark);
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
+  const bumpActivity = () => setActivityEpoch((n) => n + 1);
+  const blobLook = composerFocused ? { x: 0, y: 3 } : undefined;
+  const blobCaption =
+    capturing
+      ? "Reading page…"
+      : busy && !streamText
+        ? "Thinking…"
+        : busy && streamText
+          ? "Writing…"
+          : listening
+            ? "Listening…"
+            : "";
+  const liveBlobState: BlobState =
+    blobMood === "greeting" ||
+    blobMood === "happy" ||
+    blobMood === "error" ||
+    blobMood === "sleepy" ||
+    blobMood === "still"
+      ? blobMood
+      : listening
+        ? "listening"
+        : capturing || (busy && !streamText)
+          ? "thinking"
+          : busy && streamText
+            ? "speaking"
+            : "idle";
+  function sectionTag(p: { sectionId?: string | null; pinned?: boolean }) {
+    if (p.pinned) return "Pinned";
+    const section = sections.find((s) => s.id === p.sectionId);
+    return section?.name ?? "Pact";
+  }
+  function previewText(p: { messages: { text: string }[]; intention: string }) {
+    const last = p.messages.at(-1)?.text ?? p.intention;
+    return last.replace(/\s+/g, " ").trim();
+  }
+  function isUnread(p: { id: string; messages: { role: string }[] }) {
+    if (selected === p.id && view === "chat") return false;
+    const last = p.messages.at(-1);
+    return last?.role === "assistant";
+  }
   const libraryGroups = groupLibraryPacts(pacts, sections, {
     archived,
     query: search,
@@ -366,12 +412,12 @@ export default function App() {
   const menuPact = menu
     ? pacts.find((p) => p.id === menu.pactId)
     : undefined;
-  const healthBanner = !healthChecked
+  const healthPill = !healthChecked
     ? ""
     : !companionOnline
-      ? "Local companion offline — run pnpm server, then retry."
+      ? "Companion offline"
       : !health.ai
-        ? "AI offline — set ANTHROPIC_API_KEY or PACT_AI=claude-code in .env, restart pnpm server."
+        ? "AI offline"
         : "";
   const statusLabel = capturing
     ? "Reading page…"
@@ -667,6 +713,51 @@ export default function App() {
     const timer = window.setTimeout(() => setUiReady(true), 400);
     return () => window.clearTimeout(timer);
   }, [loaded, showSkeleton, uiReady]);
+  useEffect(() => {
+    if (!uiReady) return;
+    let cancelled = false;
+    void shouldGreet().then((greet) => {
+      if (cancelled || !greet) return;
+      setBlobMood("greeting");
+      window.clearTimeout(moodTimer.current);
+      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 900);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uiReady]);
+  useEffect(() => {
+    const onActivity = () => {
+      bumpActivity();
+      setBlobMood((m) => (m === "sleepy" || m === "still" ? "idle" : m));
+    };
+    window.addEventListener("pointerdown", onActivity, { passive: true });
+    window.addEventListener("keydown", onActivity);
+    return () => {
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+    };
+  }, []);
+  useEffect(() => {
+    if (busy || listening || capturing) return;
+    const stillT = window.setTimeout(() => {
+      setBlobMood((m) =>
+        m === "greeting" || m === "happy" || m === "error" ? m : "still",
+      );
+    }, 60_000);
+    const sleepT = window.setTimeout(() => setBlobMood("sleepy"), 300_000);
+    return () => {
+      window.clearTimeout(stillT);
+      window.clearTimeout(sleepT);
+    };
+  }, [activityEpoch, busy, listening, capturing]);
+  useEffect(() => {
+    if (error) {
+      setBlobMood("error");
+      window.clearTimeout(moodTimer.current);
+      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 1900);
+    }
+  }, [error]);
   function closeMenu() {
     if (!menu || menuExiting) return;
     setMenuExiting(true);
@@ -851,11 +942,16 @@ export default function App() {
         onDelta: (chunk) => {
           live += chunk;
           setStreamText(live);
+          heroBlob.current?.pulse();
+          bumpActivity();
         },
       });
       const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
       await update(mergeReply(latest, result, uid(), now()));
       await refreshHealth();
+      setBlobMood("happy");
+      window.clearTimeout(moodTimer.current);
+      moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 700);
     } catch (e) {
       const partial =
         e instanceof AbortInterpretError ? e.partial.trim() : live.trim();
@@ -879,6 +975,9 @@ export default function App() {
           setError("Stopped before a reply started.");
       } else {
         setError(errorText(e));
+        setBlobMood("error");
+        window.clearTimeout(moodTimer.current);
+        moodTimer.current = window.setTimeout(() => setBlobMood("idle"), 1900);
       }
     } finally {
       interpretAbort.current = null;
@@ -1377,13 +1476,30 @@ export default function App() {
                         className="recent"
                         onClick={() => openPact(p)}
                       >
-                        <strong className="recent-title">{p.title}</strong>
-                        <time className="recent-meta">
-                          {new Date(p.updatedAt).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </time>
+                        <span className="recent-avatar">
+                          <Companion
+                            seed={p.characterSeed ?? p.id}
+                            size="tiny"
+                            lively={false}
+                          />
+                        </span>
+                        <span className="recent-copy">
+                          <span className="recent-line">
+                            <strong className="recent-title">{p.title}</strong>
+                            <span className="recent-tag">{sectionTag(p)}</span>
+                          </span>
+                          <span className="recent-preview">{previewText(p)}</span>
+                        </span>
+                        {isUnread(p) ? (
+                          <span className="unread-dot" aria-label="Unread" />
+                        ) : (
+                          <time className="recent-meta">
+                            {new Date(p.updatedAt).toLocaleTimeString(undefined, {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </time>
+                        )}
                       </button>
                     )}
                     <button
@@ -1424,7 +1540,7 @@ export default function App() {
         </div>
       </aside>
       <main className="main-pane">
-        <header className={`topbar${scrolledMain ? " frosted" : ""}`}>
+        <header className={`topbar${scrolledMain ? " glass scrolled" : ""}`}>
           <button
             className="mobile-brand"
             onClick={newPact}
@@ -1440,6 +1556,7 @@ export default function App() {
               appearance={companion}
               dark={darkScheme}
               size="tiny"
+              lively={false}
             />
             <span>pact.</span>
           </button>
@@ -1449,7 +1566,10 @@ export default function App() {
                 <span className="header-avatar">
                   <Companion
                     seed={active.characterSeed ?? active.id}
-                    size="small"
+                    size={24}
+                    state={liveBlobState}
+                    look={blobLook}
+                    lively
                   />
                 </span>
                 <span>
@@ -1601,20 +1721,39 @@ export default function App() {
                             className="pact-tile"
                             onClick={() => openPact(p)}
                           >
-                            <strong className="recent-title">
-                              {p.pinned ? (
-                                <>
-                                  <Pin size={12} strokeWidth={ICON} />{" "}
-                                </>
-                              ) : null}
-                              {p.title}
-                            </strong>
-                            <time className="recent-meta">
-                              {new Date(p.updatedAt).toLocaleDateString(
-                                undefined,
-                                { month: "short", day: "numeric" },
-                              )}
-                            </time>
+                            <span className="recent-avatar">
+                              <Companion
+                                seed={p.characterSeed ?? p.id}
+                                size="tiny"
+                                lively={false}
+                              />
+                            </span>
+                            <span className="recent-copy">
+                              <span className="recent-line">
+                                <strong className="recent-title">
+                                  {p.pinned ? (
+                                    <>
+                                      <Pin size={12} strokeWidth={ICON} />{" "}
+                                    </>
+                                  ) : null}
+                                  {p.title}
+                                </strong>
+                                <span className="recent-tag">{sectionTag(p)}</span>
+                              </span>
+                              <span className="recent-preview">
+                                {previewText(p)}
+                              </span>
+                            </span>
+                            {isUnread(p) ? (
+                              <span className="unread-dot" aria-label="Unread" />
+                            ) : (
+                              <time className="recent-meta">
+                                {new Date(p.updatedAt).toLocaleTimeString(
+                                  undefined,
+                                  { hour: "numeric", minute: "2-digit" },
+                                )}
+                              </time>
+                            )}
                           </button>
                         )}
                         <button
@@ -1699,9 +1838,26 @@ export default function App() {
                 {!active ? (
                   <section className="welcome">
                     <div className="hello">
+                      <Companion
+                        appearance={companion}
+                        dark={darkScheme}
+                        size="hero"
+                        state={liveBlobState}
+                        look={blobLook}
+                        caption={blobCaption || undefined}
+                        blobRef={heroBlob}
+                        lively
+                      />
                       <div className="hello-copy">
                         <h1>What should we get done on this page?</h1>
                         <p>Read the page, or just ask.</p>
+                        <button
+                          type="button"
+                          className="hello-edit"
+                          onClick={openCompanionEditor}
+                        >
+                          Customize companion
+                        </button>
                       </div>
                     </div>
                     <button
@@ -1980,7 +2136,7 @@ export default function App() {
               </div>
             </div>
             <footer
-              className={`composer-region${scrolledComposer ? " frosted" : ""}`}
+              className="composer-region"
             >
               {toast && (
                 <div className="undo-toast" role="status" aria-live="polite">
@@ -1997,14 +2153,15 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {healthBanner && !error && (
+              {healthPill && !error && (
                 <div className="health-banner" role="status">
-                  <span>{healthBanner}</span>
+                  <span className="status-dot" aria-hidden="true" />
+                  <span>{healthPill}</span>
                   <button
                     className="text-button"
                     onClick={() => void refreshHealth()}
                   >
-                    Check again
+                    Retry
                   </button>
                 </div>
               )}
@@ -2228,7 +2385,15 @@ export default function App() {
                   value={draft}
                   maxLength={8000}
                   rows={1}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onFocus={() => {
+                    setComposerFocused(true);
+                    bumpActivity();
+                  }}
+                  onBlur={() => setComposerFocused(false)}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    bumpActivity();
+                  }}
                   onPaste={(e) => {
                     const files = Array.from(e.clipboardData.files).filter(
                       (f) => isImageMime(f.type) || f.type.startsWith("image/"),
@@ -2238,6 +2403,7 @@ export default function App() {
                     void addFiles(files);
                   }}
                   onKeyDown={(e) => {
+                    bumpActivity();
                     if (
                       e.key === "Enter" &&
                       !e.shiftKey &&
@@ -2251,7 +2417,7 @@ export default function App() {
                 />
                 <div className="composer-actions">
                   <button
-                    className="icon-button"
+                    className="icon-button attach-button"
                     title="Attach"
                     aria-label="Attach"
                     aria-expanded={attachMenu}
@@ -2260,7 +2426,7 @@ export default function App() {
                       busy || attachments.length >= ATTACHMENT_LIMITS.maxFiles
                     }
                   >
-                    <Paperclip size={19} strokeWidth={ICON} />
+                    <Plus size={18} strokeWidth={ICON} />
                   </button>
                   <button
                     className={`icon-button mic-button ${listening ? "active" : ""}`}
@@ -2361,7 +2527,9 @@ export default function App() {
                   <Companion
                     appearance={draftCompanion}
                     dark={darkScheme}
-                    size="hero"
+                    size={72}
+                    state="idle"
+                    lively
                   />
                 </div>
                 <div className="editor-group">
