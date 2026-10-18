@@ -2,9 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BRAND_SEED,
+  COLOR_SWATCHES,
+  DEFAULT_COMPANION,
   PALETTE,
+  SHAPE_OPTIONS,
   SHAPES,
+  brandCharacter,
   characterFor,
+  companionColorForScheme,
+  companionSwatchName,
+  normalizeCompanion,
   withCharacterSeeds,
 } from "../lib/character";
 
@@ -70,7 +77,8 @@ test("eye geometry stays inside the viewBox", () => {
     assert.ok(eye.width > 0 && eye.height > 0);
     assert.ok(eye.cx > 8 && eye.cx < 64);
     assert.ok(eye.cy > 8 && eye.cy < 64);
-    assert.ok(eye.kind === "pill" || eye.kind === "dot");
+    assert.equal(eye.kind, "pill");
+    assert.ok(eye.height > eye.width, "vertical pills");
   }
 });
 
@@ -80,4 +88,35 @@ test("all shapes are reachable across many seeds", () => {
     seen.add(characterFor(`seed-${i}`).shape);
   }
   assert.equal(seen.size, SHAPES.length);
+});
+
+test("brandCharacter applies shape and color overrides", () => {
+  const appearance = { shape: 7, color: "#3B82F6" };
+  const light = brandCharacter(appearance, false);
+  const dark = brandCharacter(appearance, true);
+  assert.equal(light.shape, 7);
+  assert.equal(light.path, SHAPES[7]);
+  assert.equal(light.color, "#3B82F6");
+  assert.equal(dark.color, "#60A5FA");
+  assert.equal(light.seed, BRAND_SEED);
+});
+
+test("normalizeCompanion rejects invalid shape and color", () => {
+  assert.deepEqual(normalizeCompanion(null), DEFAULT_COMPANION);
+  assert.deepEqual(normalizeCompanion({ shape: 99, color: "red" }), {
+    shape: DEFAULT_COMPANION.shape,
+    color: DEFAULT_COMPANION.color,
+  });
+  assert.deepEqual(normalizeCompanion({ shape: 4, color: "#EF4444" }), {
+    shape: 4,
+    color: "#EF4444",
+  });
+});
+
+test("companion swatches expose names and dark variants", () => {
+  assert.ok(SHAPE_OPTIONS.length >= 8);
+  assert.ok(COLOR_SWATCHES.length >= 8);
+  assert.equal(companionSwatchName("#3B82F6"), "Blue");
+  assert.equal(companionColorForScheme("#3B82F6", true), "#60A5FA");
+  assert.equal(companionColorForScheme("#ABCDEF", false), "#ABCDEF");
 });

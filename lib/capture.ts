@@ -1,5 +1,9 @@
 import type { Source } from "./model";
-import { readPageSnapshot, type CaptureMode } from "./page-reader";
+import { pageAccess } from "./page-access";
+import { createInjectedPageReader, type CaptureMode } from "./page-reader";
+import { SITE_ACCESS_DENIED } from "./site-access";
+export { pageAccess };
+const readInjectedPage = createInjectedPageReader();
 export type SelectionRequest = {
   id: string;
   tabId: number;
@@ -9,6 +13,31 @@ export type SelectionRequest = {
   at: number;
   frameId?: number;
 };
+const PROTECTED_PAGE =
+  "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.";
+const PAGE_NOT_VISIBLE =
+  "Click Pact’s toolbar icon on this page, then choose Read current page or Select item.";
+
+function isPdfAddress(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol === "chrome-extension:" &&
+      parsed.hostname === "mhjfbmdgcfjbbpaeojofohoefgiehjai"
+    )
+      return true;
+    return /\.pdf$/i.test(decodeURIComponent(parsed.pathname));
+  } catch {
+    return false;
+  }
+}
+
+function scriptingDenied(message: string) {
+  return /cannot be scripted|extensions gallery|cannot access a chrome|cannot access (?:a |an )?edge:|chrome-extension:\/\//i.test(
+    message,
+  );
+}
+
 export function samePage(left: string, right: string) {
   try {
     const a = new URL(left),
@@ -80,17 +109,23 @@ export async function capturePage(
     throw new Error(
       "The active tab changed. Click Pact’s toolbar icon on the page you want to share.",
     );
-  if (!tab.url || !/^https?:/.test(tab.url))
+  // pendingUrl only fills in while the committed url is still empty (navigation).
+  // A missing URL means this extension cannot see the page yet. That is an
+  // unread site, separate from chrome:// and the Chrome Web Store.
+  const address = tab.url || tab.pendingUrl || "";
+  if (!address) throw new Error(PAGE_NOT_VISIBLE);
+  if (isPdfAddress(address))
     throw new Error(
-      "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.",
+      "Chrome’s PDF viewer does not share the document text. Copy a passage and use Make a Pact from selection.",
     );
-  if (request && !samePage(request.url, tab.url))
+  if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
+  if (request && !samePage(request.url, address))
     throw new Error("The selected page changed. Select the text again.");
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: target.tabId },
       world: "MAIN",
-      func: readPageSnapshot,
+      func: readInjectedPage,
       args: [mode, request?.text ?? ""],
     });
     const value = results[0]?.result as
@@ -116,6 +151,13 @@ export async function capturePage(
       /cancelled|timed out|changed|Highlight text|no readable text/.test(text)
     )
       throw new Error(text);
+    if (
+      /manifest must request permission|does not have permission to access|cannot access contents of url/i.test(
+        text,
+      )
+    )
+      throw new Error(SITE_ACCESS_DENIED);
+    if (scriptingDenied(text)) throw new Error(PROTECTED_PAGE);
     throw new Error(
       "Chrome could not read this page. Click Pact’s toolbar icon on this tab, then try Read current page again.",
     );

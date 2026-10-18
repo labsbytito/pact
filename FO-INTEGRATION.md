@@ -43,3 +43,15 @@ No live Fo or paid AI call was made. Verified only with mocked MCP replies (`tes
 - AI: direct API default `claude-sonnet-5-5` (`ANTHROPIC_MODEL` overrides). CLI model only via `PACT_CLAUDE_MODEL`. Budget caps now apply to both providers. `/health` adds non-secret `aiStatus`. Provider errors map to specific messages with 402/429/502/503/504; unknown server errors return 500.
 
 A real-world booking or other consequential action has not been tested. The user will choose the demonstration later; no fixed demo flow is built into the product.
+
+## Fix: expired Fo sign-in (offline-tested only)
+`fo: true` means a live client exists. A refresh or `callTool` that the MCP SDK rejects as unauthorized (`UnauthorizedError`, HTTP 401, or `invalid_grant`) calls `expireIfCurrent` for that connection generation: tokens are removed, the client is closed, and `needsReconnect` becomes true. The panel shows Reconnect. `/fo/connect` (`beginFo`) deletes a stale token set and asks for a new authorization URL instead of staying “connected”.
+
+A rejection before Fo accepts the tool is `NotSubmittedError`: the run is `failed` and the request was not sent. After Fo has accepted a call, a later poll error stays `unknown` (“check Fo activity”) and is not retried. Tool results whose text says unauthorized are Fo’s own reply, not a transport auth failure, so the session stays connected. A newer connect is not clobbered: expiry checks the generation it observed.
+
+No expired-token refresh was exercised against the live Fo endpoint.
+
+## Fix: consequential Fo tools (offline-tested only)
+`ask_fo` and read-only `get_*` / `list_*` tools are allowed by default. `start_fo_call` and any other tool name are denied unless `PACT_FO_CONSEQUENTIAL` is exactly `1`. When that env value is set, the server marks the proposal `consequential` and `/actions/approve` still rejects it unless the body includes `confirmConsequential: true`. The server recomputes the policy; the client flag alone is not trusted. Denied tools are omitted from the model’s tool list and, if proposed anyway, withheld with a sentence that nothing was sent.
+
+No live `start_fo_call` was made.

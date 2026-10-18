@@ -15,8 +15,22 @@ export default defineConfig({
       "identity",
       "contextMenus",
     ],
+    // The companion is the only host granted at install. Page access is optional
+    // and requested one origin at a time from a side-panel click. activeTab
+    // still covers the toolbar icon and the selection context menu. The tabs
+    // permission is not requested.
     host_permissions: ["http://127.0.0.1:4317/*"],
+    optional_host_permissions: ["http://*/*", "https://*/*"],
     action: { default_title: "Make a Pact" },
+    commands: {
+      open_pact: {
+        suggested_key: {
+          default: "Alt+Shift+P",
+          mac: "Alt+Shift+P",
+        },
+        description: "Open Pact side panel",
+      },
+    },
     icons: {
       16: "icon/16.png",
       32: "icon/32.png",

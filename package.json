@@ -8,11 +8,12 @@
     "build": "wxt build",
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "server": "tsx server/index.ts"
+    "server": "tsx server/boot.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "@wxt-dev/module-react": "latest",
+    "dotenv": "^18.0.8",
     "express": "latest",
     "lucide-react": "latest",
     "react": "latest",

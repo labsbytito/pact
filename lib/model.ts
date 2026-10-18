@@ -23,6 +23,8 @@ export type Message = {
   role: "user" | "assistant";
   text: string;
   at: string;
+  /** User stopped generation; keep partial text. */
+  stopped?: boolean;
 };
 export type Action = {
   id: string;
@@ -32,6 +34,7 @@ export type Action = {
   expiresAt?: string;
   toolName?: string;
   arguments?: Record<string, unknown>;
+  consequential?: boolean;
   status:
     | "proposed"
     | "approved"
@@ -58,8 +61,22 @@ export type Pact = {
   action?: Action;
   actions?: Action[];
   archived?: boolean;
+  pinned?: boolean;
+  /** User-created section / folder id. */
+  sectionId?: string | null;
 };
-export type Settings = { onboarded: boolean };
+export type PactSection = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+export type ThemePreference = "system" | "light" | "dark";
+export type Settings = {
+  onboarded: boolean;
+  theme?: ThemePreference;
+  /** Selected microphone device id, or "default". */
+  micDeviceId?: string;
+};
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
 export const message = (role: Message["role"], text: string): Message => ({

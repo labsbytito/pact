@@ -1,6 +1,13 @@
 import type { Pact, Source, Action } from "./model";
+import {
+  wireAttachments,
+  type Attachment,
+} from "./attachments";
 // Keep the complete local history; only send the context needed for this reply.
-export function interpretationContext(pact: Pact) {
+export function interpretationContext(
+  pact: Pact,
+  attachments: readonly Attachment[] = [],
+) {
   let source: Source | undefined;
   if (pact.source) {
     const s = pact.source;
@@ -37,6 +44,7 @@ export function interpretationContext(pact: Pact) {
         candidates.some((line) => line.text.length > 1000),
     };
   }
+  const wired = wireAttachments(attachments).slice(0, 3);
   const payload = {
     pact: {
       id: pact.id,
@@ -45,9 +53,18 @@ export function interpretationContext(pact: Pact) {
       messages: pact.messages
         .slice(-24)
         .map((m) => ({ role: m.role, text: m.text.slice(0, 8000) })),
+      attachments: wired,
     },
   };
   const bytes = () => new TextEncoder().encode(JSON.stringify(payload)).length;
+  while (bytes() > 240000 && payload.pact.attachments.length) {
+    const last = payload.pact.attachments.at(-1)!;
+    if (last.data && last.data.length > 4000)
+      last.data = last.data.slice(0, Math.floor(last.data.length / 2));
+    else if (last.text && last.text.length > 400)
+      last.text = last.text.slice(0, Math.floor(last.text.length / 2));
+    else payload.pact.attachments.pop();
+  }
   while (bytes() > 240000 && payload.pact.messages.length > 1)
     payload.pact.messages.shift();
   if (bytes() > 240000 && source) source.text = source.text.slice(0, 4000);
@@ -100,6 +117,7 @@ export function mergeReply(
   result: {
     reply: string;
     title?: string;
+    stopped?: boolean;
     action?: {
       title: string;
       instruction: string;
@@ -107,6 +125,7 @@ export function mergeReply(
       toolName: string;
       arguments: Record<string, unknown>;
       expiresAt?: string;
+      consequential?: boolean;
     };
   },
   id: string,
@@ -117,7 +136,13 @@ export function mergeReply(
     title: result.title ?? pact.title,
     messages: [
       ...pact.messages,
-      { id, at, role: "assistant" as const, text: result.reply },
+      {
+        id,
+        at,
+        role: "assistant" as const,
+        text: result.reply,
+        ...(result.stopped ? { stopped: true } : {}),
+      },
     ],
   };
   if (unresolved(pact.action)) return next;
