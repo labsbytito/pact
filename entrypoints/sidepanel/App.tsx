@@ -10,7 +10,6 @@ import {
   Link2,
   Mic,
   X,
-  ChevronLeft,
   ChevronRight,
   Check,
   Globe,
@@ -21,8 +20,6 @@ import {
   Paperclip,
   AudioLines,
   ShieldCheck,
-  MapPin,
-  MoreHorizontal,
   MousePointer2,
 } from "lucide-react";
 import type { Action, Pact, Source, Settings } from "../../lib/model";
@@ -35,7 +32,7 @@ import {
   timestamp,
   approve,
 } from "../../lib/model";
-import { read, write } from "../../lib/storage";
+import { read, write, readSync, writeSync } from "../../lib/storage";
 import {
   capturePage,
   pendingSelection,
@@ -44,7 +41,17 @@ import {
 import type { CaptureMode } from "../../lib/page-reader";
 import { api, interpret, ApiError, type Health } from "../../lib/api";
 import Companion from "./Companion";
-import { withCharacterSeeds } from "../../lib/character";
+import {
+  withCharacterSeeds,
+  DEFAULT_COMPANION,
+  SHAPE_OPTIONS,
+  COLOR_SWATCHES,
+  SHAPES,
+  normalizeCompanion,
+  companionColorForScheme,
+  companionSwatchName,
+  type CompanionAppearance,
+} from "../../lib/character";
 // Render links as React nodes: captured/returned text never becomes HTML.
 function LinkedText({ text }: { text: string }) {
   const nodes: ReactNode[] = [];
@@ -184,7 +191,8 @@ export default function App() {
     [view, setView] = useState<"chat" | "library">("chat"),
     [settingsOpen, setSettingsOpen] = useState(false),
     [sourceOpen, setSourceOpen] = useState(false),
-    [reviewOpen, setReviewOpen] = useState(false);
+    [reviewOpen, setReviewOpen] = useState(false),
+    [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState(""),
     [source, setSource] = useState<Source>(),
     [busy, setBusy] = useState(false),
@@ -196,7 +204,15 @@ export default function App() {
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [connecting, setConnecting] = useState(false),
-    [authUrl, setAuthUrl] = useState<string>();
+    [authUrl, setAuthUrl] = useState<string>(),
+    [companion, setCompanion] = useState<CompanionAppearance>(DEFAULT_COMPANION),
+    [draftCompanion, setDraftCompanion] =
+      useState<CompanionAppearance>(DEFAULT_COMPANION),
+    [darkScheme, setDarkScheme] = useState(
+      () =>
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches,
+    );
   const dialog = useRef<HTMLElement>(null);
   const initialCaptureAllowed = useRef(true);
   const captureGeneration = useRef(0),
@@ -217,13 +233,24 @@ export default function App() {
       `${p.title} ${p.intention}`.toLowerCase().includes(search.toLowerCase()),
   );
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onScheme = () => setDarkScheme(media.matches);
+    media.addEventListener("change", onScheme);
+    return () => media.removeEventListener("change", onScheme);
+  }, []);
+  useEffect(() => {
+    const accent = companionColorForScheme(companion.color, darkScheme);
+    document.documentElement.style.setProperty("--companion", accent);
+  }, [companion.color, darkScheme]);
+  useEffect(() => {
     let cancelled = false;
     Promise.all([
       read<Pact[]>("pacts", []),
       read<Settings>("settings", { onboarded: false }),
       read<string | null>("activePact", null),
+      readSync<unknown>("companion", DEFAULT_COMPANION),
     ])
-      .then(([stored, s, last]) => {
+      .then(([stored, s, last, savedCompanion]) => {
         if (cancelled) return;
         const p = withCharacterSeeds(stored);
         setPacts(p);
@@ -231,6 +258,9 @@ export default function App() {
         if (stored.some((item) => !item.characterSeed))
           void save(p).catch(() => {});
         setSettings(s);
+        const appearance = normalizeCompanion(savedCompanion);
+        setCompanion(appearance);
+        setDraftCompanion(appearance);
         if (last && p.some((item) => item.id === last && !item.archived))
           setSelected(last);
         setLoaded(true);
@@ -694,7 +724,29 @@ export default function App() {
     setSettingsOpen(false);
     setSourceOpen(false);
     setReviewOpen(false);
+    if (editorOpen) {
+      setDraftCompanion(companion);
+      setEditorOpen(false);
+    }
   };
+  function openCompanionEditor() {
+    setDraftCompanion(companion);
+    setSettingsOpen(false);
+    setSourceOpen(false);
+    setReviewOpen(false);
+    setEditorOpen(true);
+  }
+  async function saveCompanion() {
+    const next = normalizeCompanion(draftCompanion);
+    setCompanion(next);
+    setDraftCompanion(next);
+    setEditorOpen(false);
+    try {
+      await writeSync("companion", next);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key === "Escape") closeDialog();
@@ -705,7 +757,7 @@ export default function App() {
   if (!loaded)
     return (
       <div className="boot">
-        <Companion thinking />
+        <Companion appearance={companion} dark={darkScheme} thinking />
         <p>Finding your Pacts…</p>
       </div>
     );
@@ -720,7 +772,7 @@ export default function App() {
             newPact();
           }}
         >
-          <Companion size="small" />
+          <Companion appearance={companion} dark={darkScheme} size="small" />
           <span>
             pact<span className="wordmark-dot">.</span>
           </span>
@@ -808,7 +860,16 @@ export default function App() {
             aria-label="New Pact"
             title="New Pact"
           >
-            <Companion seed={view === "chat" ? active?.characterSeed ?? active?.id : undefined} size="tiny" />
+            <Companion
+              seed={
+                view === "chat"
+                  ? active?.characterSeed ?? active?.id
+                  : undefined
+              }
+              appearance={companion}
+              dark={darkScheme}
+              size="tiny"
+            />
             <span>pact.</span>
           </button>
           <div className="topbar-title">
@@ -923,7 +984,11 @@ export default function App() {
             </div>
             {!visible.length && (
               <div className="library-empty">
-                <Companion size="normal" />
+                <Companion
+                  appearance={companion}
+                  dark={darkScheme}
+                  size="normal"
+                />
                 <h2>
                   {search
                     ? "No matching conversations"
@@ -953,10 +1018,20 @@ export default function App() {
                 {!active ? (
                   <section className="welcome">
                     <div className="hello">
-                      <Companion size="hero" />
+                      <Companion
+                        appearance={companion}
+                        dark={darkScheme}
+                        size="hero"
+                      />
                       <div className="hello-copy">
-                        <h1>Hi, I’m Pact.</h1>
+                        <h1>What should we get done on this page?</h1>
                         <p>Bring me a page, or just a thought.</p>
+                        <button
+                          className="hello-edit text-button"
+                          onClick={openCompanionEditor}
+                        >
+                          Customize companion
+                        </button>
                       </div>
                     </div>
                     <button
@@ -993,35 +1068,28 @@ export default function App() {
                     </button>
                     {currentSource ? (
                       <div
-                        className="suggestions choice-card"
+                        className="suggestions"
                         aria-label="Ways to use this page"
                       >
-                        <h2 className="choice-question">
-                          What do you want to do with this page?
-                        </h2>
                         {(
                           [
                             [
                               "Help me understand this page.",
-                              "Understand this page",
+                              "Read this page",
                             ],
                             [
                               "Help me turn what caught my attention on this page into a practical next step.",
-                              "Find a next step",
+                              "Plan next step",
                             ],
                           ] as const
-                        ).map(([prompt, label], index) => (
+                        ).map(([prompt, label]) => (
                           <button
                             key={label}
-                            className="choice-option"
                             onClick={() => {
                               setDraft(prompt);
                               composer.current?.focus();
                             }}
                           >
-                            <span className="choice-letter" aria-hidden="true">
-                              {String.fromCharCode(65 + index)}
-                            </span>
                             <span>{label}</span>
                           </button>
                         ))}
@@ -1055,49 +1123,21 @@ export default function App() {
                         <ChevronRight size={15} />
                       </button>
                     )}
-                    {active.messages.map((m, i) => (
+                    {active.messages.map((m) => (
                       <div key={m.id} className={`message-row ${m.role}`}>
-                        {m.role === "assistant" && (
-                          <Companion
-                            seed={active.characterSeed ?? active.id}
-                            size="tiny"
-                            state={
-                              active.action?.status === "running"
-                                ? "working"
-                                : active.action?.status === "unknown" ||
-                                    active.action?.status === "failed"
-                                  ? "attention"
-                                  : "idle"
-                            }
-                          />
-                        )}
                         <div className="message">
                           {m.role === "assistant" ? (
                             <ReadableReply text={m.text} />
                           ) : (
                             <p>{m.text}</p>
                           )}
-                          <time>
-                            {new Date(m.at).toLocaleTimeString(undefined, {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </time>
                         </div>
                       </div>
                     ))}
                     {busy && (
                       <div className="message-row assistant">
-                        <Companion
-                          seed={active?.characterSeed ?? active?.id}
-                          size="tiny"
-                          thinking
-                        />
                         <div className="thinking-bubble" role="status">
-                          <i />
-                          <i />
-                          <i />
-                          <span className="sr-only">Pact is thinking</span>
+                          Thinking…
                         </div>
                       </div>
                     )}
@@ -1327,7 +1367,7 @@ export default function App() {
                       ? "Listening…"
                       : active?.action?.status === "needs_answer"
                         ? "Reply to Fo…"
-                        : "Message Pact…"
+                        : "What do you want to get done?"
                   }
                   value={draft}
                   maxLength={8000}
@@ -1393,7 +1433,7 @@ export default function App() {
           </>
         )}
       </main>
-      {(settingsOpen || sourceOpen || reviewOpen) && (
+      {(settingsOpen || sourceOpen || reviewOpen || editorOpen) && (
         <div className="modal-backdrop" onClick={closeDialog}>
           <section
             ref={dialog}
@@ -1402,7 +1442,7 @@ export default function App() {
               if (e.key !== "Tab") return;
               const items = Array.from(
                 dialog.current?.querySelectorAll<HTMLElement>(
-                  "button:not([disabled]),a[href],input,summary",
+                  "button:not([disabled]),a[href],input,summary,input[type=color]",
                 ) ?? [],
               );
               const first = items[0],
@@ -1422,23 +1462,169 @@ export default function App() {
           >
             <header>
               <h2 id="dialog-title">
-                {settingsOpen
-                  ? "Settings"
-                  : sourceOpen
-                    ? "Page context"
-                    : "Review action"}
+                {editorOpen
+                  ? "Companion"
+                  : settingsOpen
+                    ? "Settings"
+                    : sourceOpen
+                      ? "Page context"
+                      : "Review action"}
               </h2>
               <button
                 className="icon-button"
                 aria-label="Close dialog"
                 onClick={closeDialog}
-                autoFocus
+                autoFocus={!editorOpen}
               >
                 <X size={20} />
               </button>
             </header>
-            {settingsOpen ? (
+            {editorOpen ? (
               <>
+                <div className="companion-stage" aria-hidden="true">
+                  <Companion
+                    appearance={draftCompanion}
+                    dark={darkScheme}
+                    size="hero"
+                  />
+                </div>
+                <div className="editor-group">
+                  <h3>Shape</h3>
+                  <div className="shape-row" role="listbox" aria-label="Shape">
+                    {SHAPE_OPTIONS.map((option) => (
+                      <button
+                        key={option.shape}
+                        type="button"
+                        role="option"
+                        aria-selected={draftCompanion.shape === option.shape}
+                        aria-label={option.name}
+                        title={option.name}
+                        className={`shape-tile${draftCompanion.shape === option.shape ? " selected" : ""}`}
+                        onClick={() =>
+                          setDraftCompanion((current) => ({
+                            ...current,
+                            shape: option.shape,
+                          }))
+                        }
+                      >
+                        <svg viewBox="0 0 72 72" fill="none" aria-hidden="true">
+                          <path
+                            d={SHAPES[option.shape]}
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="editor-group">
+                  <h3>Color</h3>
+                  <div className="swatch-row" role="listbox" aria-label="Color">
+                    {COLOR_SWATCHES.map((swatch) => {
+                      const value = companionColorForScheme(
+                        swatch.color,
+                        darkScheme,
+                      );
+                      const selected =
+                        draftCompanion.color === swatch.color ||
+                        draftCompanion.color === swatch.dark;
+                      return (
+                        <button
+                          key={swatch.name}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          aria-label={swatch.name}
+                          title={swatch.name}
+                          className={`color-swatch${selected ? " selected" : ""}`}
+                          style={{ background: value }}
+                          onClick={() =>
+                            setDraftCompanion((current) => ({
+                              ...current,
+                              color: swatch.color,
+                            }))
+                          }
+                        />
+                      );
+                    })}
+                    <label
+                      className={`color-swatch custom${
+                        !COLOR_SWATCHES.some(
+                          (swatch) =>
+                            swatch.color === draftCompanion.color ||
+                            swatch.dark === draftCompanion.color,
+                        )
+                          ? " selected"
+                          : ""
+                      }`}
+                      title="Custom"
+                    >
+                      <span />
+                      <input
+                        type="color"
+                        aria-label="Custom color"
+                        value={
+                          /^#[0-9A-Fa-f]{6}$/.test(draftCompanion.color)
+                            ? draftCompanion.color
+                            : "#8E8E93"
+                        }
+                        onChange={(e) =>
+                          setDraftCompanion((current) => ({
+                            ...current,
+                            color: e.target.value.toUpperCase(),
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <p className="swatch-name">
+                    {companionSwatchName(draftCompanion.color)}
+                  </p>
+                </div>
+                <div className="editor-actions">
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      setDraftCompanion(companion);
+                      setEditorOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button className="primary" onClick={() => void saveCompanion()}>
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : settingsOpen ? (
+              <>
+                <div className="settings-section">
+                  <h3>Companion</h3>
+                  <div className="connection-row">
+                    <Companion
+                      appearance={companion}
+                      dark={darkScheme}
+                      size="small"
+                    />
+                    <span>
+                      <strong>{companionSwatchName(companion.color)}</strong>
+                      <small>
+                        {
+                          SHAPE_OPTIONS.find(
+                            (option) => option.shape === companion.shape,
+                          )?.name
+                        }{" "}
+                        · accent for links
+                      </small>
+                    </span>
+                  </div>
+                  <button
+                    className="secondary full"
+                    onClick={openCompanionEditor}
+                  >
+                    Customize companion
+                  </button>
+                </div>
                 <div className="settings-section">
                   <h3>Connections</h3>
                   <div className="connection-row">

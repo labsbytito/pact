@@ -2,7 +2,11 @@
 
 export type CharacterSize = "tiny" | "small" | "normal" | "hero";
 export type CharacterState =
-  "idle" | "thinking" | "working" | "happy" | "attention";
+  | "idle"
+  | "thinking"
+  | "working"
+  | "happy"
+  | "attention";
 
 export type EyeKind = "pill" | "dot";
 
@@ -25,10 +29,16 @@ export type Character = {
   };
 };
 
+/** User-chosen brand companion. Drives --accent when applied. */
+export type CompanionAppearance = {
+  shape: number;
+  color: string;
+};
+
 /** Brand default when no Pact id is passed. */
 export const BRAND_SEED = "pact.brand";
 
-/** Flat, bright fills — no gradients. */
+/** Flat, bright fills — no gradients. Used by seed-derived Pact companions. */
 export const PALETTE = [
   "#1c1c1e",
   "#2f6f6a",
@@ -71,6 +81,37 @@ export const SHAPES: readonly string[] = [
   "M28 14C38 10 50 16 52 26C54 34 48 38 46 42C50 48 48 58 36 60C24 58 20 48 26 42C24 38 18 34 20 26C22 16 24 15 28 14Z",
 ];
 
+/** Shapes offered in the companion editor (Watch face pattern). */
+export const SHAPE_OPTIONS = [
+  { shape: 0, name: "Circle" },
+  { shape: 1, name: "Blob" },
+  { shape: 2, name: "Gumdrop" },
+  { shape: 3, name: "Pill" },
+  { shape: 4, name: "Teardrop" },
+  { shape: 7, name: "Squircle" },
+] as const;
+
+/**
+ * Apple system hues for the companion accent picker.
+ * `color` is the stored light value; `dark` is used under prefers-color-scheme: dark.
+ */
+export const COLOR_SWATCHES = [
+  { name: "Graphite", color: "#8E8E93", dark: "#98989D" },
+  { name: "Blue", color: "#007AFF", dark: "#0A84FF" },
+  { name: "Teal", color: "#30B0C7", dark: "#40C8E0" },
+  { name: "Green", color: "#34C759", dark: "#30D158" },
+  { name: "Yellow", color: "#FFCC00", dark: "#FFD60A" },
+  { name: "Orange", color: "#FF9500", dark: "#FF9F0A" },
+  { name: "Red", color: "#FF3B30", dark: "#FF453A" },
+  { name: "Pink", color: "#FF2D55", dark: "#FF375F" },
+  { name: "Purple", color: "#AF52DE", dark: "#BF5AF2" },
+] as const;
+
+export const DEFAULT_COMPANION: CompanionAppearance = {
+  shape: 0,
+  color: COLOR_SWATCHES[0]!.color,
+};
+
 function hash(seed: string): number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
@@ -86,6 +127,10 @@ function pick<T>(list: readonly T[], n: number): T {
 
 function mix(h: number, salt: number): number {
   return (Math.imul(h ^ salt, 0x9e3779b9) >>> 0) % 1000;
+}
+
+function isHexColor(value: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(value);
 }
 
 /** Pure: same seed → same character, forever. */
@@ -124,6 +169,54 @@ export function characterFor(seed?: string): Character {
       lookY,
     },
   };
+}
+
+/** Brand companion with optional user overrides for shape and color. */
+export function brandCharacter(
+  appearance: CompanionAppearance = DEFAULT_COMPANION,
+  dark = false,
+): Character {
+  const base = characterFor(BRAND_SEED);
+  const shape = SHAPE_OPTIONS.some((option) => option.shape === appearance.shape)
+    ? appearance.shape
+    : DEFAULT_COMPANION.shape;
+  return {
+    ...base,
+    shape,
+    path: SHAPES[shape]!,
+    color: companionColorForScheme(appearance.color, dark),
+    tilt: 0,
+  };
+}
+
+export function companionColorForScheme(color: string, dark = false): string {
+  const swatch = COLOR_SWATCHES.find(
+    (item) => item.color === color || item.dark === color,
+  );
+  if (swatch) return dark ? swatch.dark : swatch.color;
+  return isHexColor(color) ? color : DEFAULT_COMPANION.color;
+}
+
+export function companionSwatchName(color: string): string {
+  const swatch = COLOR_SWATCHES.find(
+    (item) => item.color === color || item.dark === color,
+  );
+  return swatch?.name ?? "Custom";
+}
+
+export function normalizeCompanion(value: unknown): CompanionAppearance {
+  if (!value || typeof value !== "object") return { ...DEFAULT_COMPANION };
+  const raw = value as { shape?: unknown; color?: unknown };
+  const shape =
+    typeof raw.shape === "number" &&
+    SHAPE_OPTIONS.some((option) => option.shape === raw.shape)
+      ? raw.shape
+      : DEFAULT_COMPANION.shape;
+  const color =
+    typeof raw.color === "string" && isHexColor(raw.color)
+      ? raw.color
+      : DEFAULT_COMPANION.color;
+  return { shape, color };
 }
 
 export function newCharacterSeed(id: string, occupied: readonly string[]) {

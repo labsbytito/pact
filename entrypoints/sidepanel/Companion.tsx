@@ -1,7 +1,9 @@
 import {
+  brandCharacter,
   characterFor,
   type CharacterSize,
   type CharacterState,
+  type CompanionAppearance,
 } from "../../lib/character";
 
 export type CompanionProps = {
@@ -9,6 +11,9 @@ export type CompanionProps = {
   size?: CharacterSize;
   thinking?: boolean;
   state?: CharacterState;
+  /** When set (and no seed), renders the user's customized brand companion. */
+  appearance?: CompanionAppearance;
+  dark?: boolean;
 };
 
 function resolveState(
@@ -19,14 +24,19 @@ function resolveState(
   return state ?? "idle";
 }
 
-/** SVG companion — deterministic from seed. Default seed is the brand mascot. */
+/** SVG companion — seed-derived for Pacts, or appearance for the brand mark. */
 export default function Companion({
   seed,
   size = "normal",
   thinking = false,
   state,
+  appearance,
+  dark = false,
 }: CompanionProps) {
-  const character = characterFor(seed);
+  const character =
+    seed && seed.trim()
+      ? characterFor(seed)
+      : brandCharacter(appearance, dark);
   const mood = resolveState(thinking, state);
   const { eye } = character;
   const rx = eye.width / 2;
@@ -46,7 +56,11 @@ export default function Companion({
           className="character-pose"
           transform={`rotate(${character.tilt} 36 36)`}
         >
-          <path className="character-body" d={character.path} fill={character.color} />
+          <path
+            className="character-body"
+            d={character.path}
+            fill={character.color}
+          />
           <g
             className="character-eyes"
             transform={`rotate(${eye.rotate} ${eye.cx + eye.lookX} ${eye.cy + eye.lookY})`}
@@ -76,4 +90,9 @@ export default function Companion({
   );
 }
 
-export { characterFor, BRAND_SEED } from "../../lib/character";
+export {
+  characterFor,
+  brandCharacter,
+  BRAND_SEED,
+  DEFAULT_COMPANION,
+} from "../../lib/character";
