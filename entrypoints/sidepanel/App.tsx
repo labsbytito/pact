@@ -400,12 +400,12 @@ export default function App() {
   const menuPact = menu
     ? pacts.find((p) => p.id === menu.pactId)
     : undefined;
-  const healthPill = !healthChecked
+  const healthBanner = !healthChecked
     ? ""
     : !companionOnline
-      ? "Companion offline"
+      ? "Local companion offline — run pnpm server, then retry."
       : !health.ai
-        ? "AI offline"
+        ? "AI offline — set ANTHROPIC_API_KEY or PACT_AI=claude-code in .env, restart pnpm server."
         : "";
   const statusLabel = capturing
     ? "Reading page…"
@@ -1877,6 +1877,10 @@ export default function App() {
                       {(
                         [
                           [
+                            "Help me understand this page.",
+                            "Read this page",
+                          ],
+                          [
                             "Help me turn what caught my attention on this page into a practical next step.",
                             "Plan next step",
                           ],
@@ -2127,15 +2131,14 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {healthPill && !error && (
+              {healthBanner && !error && (
                 <div className="health-banner" role="status">
-                  <span className="status-dot" aria-hidden="true" />
-                  <span>{healthPill}</span>
+                  <span>{healthBanner}</span>
                   <button
                     className="text-button"
                     onClick={() => void refreshHealth()}
                   >
-                    Retry
+                    Check again
                   </button>
                 </div>
               )}
@@ -2641,7 +2644,8 @@ export default function App() {
                 <div className="settings-pane">
                   {settingsSection === "general" && (
                     <>
-                      <p className="settings-group-label">Preferences</p>
+                      <h3 className="settings-pane-title">General</h3>
+                      <p className="settings-group-label">Appearance</p>
                       <div className="settings-card">
                         <label className="settings-row">
                           <span>Theme</span>
@@ -2659,6 +2663,9 @@ export default function App() {
                             <option value="dark">Dark</option>
                           </select>
                         </label>
+                      </div>
+                      <p className="settings-group-label">System</p>
+                      <div className="settings-card">
                         <label className="settings-row">
                           <span>Microphone</span>
                           <select
@@ -2691,6 +2698,9 @@ export default function App() {
                             {micGranted ? "Manage" : "Allow"}
                           </button>
                         </div>
+                      </div>
+                      <p className="settings-group-label">Intelligence</p>
+                      <div className="settings-card">
                         <div className="settings-row">
                           <span>Claude</span>
                           <span className="settings-value">
@@ -2722,6 +2732,7 @@ export default function App() {
                   )}
                   {settingsSection === "companion" && (
                     <>
+                      <h3 className="settings-pane-title">Companion</h3>
                       <p className="settings-group-label">Account</p>
                       <div className="settings-card account-card">
                         <div className="account-row">
@@ -2755,6 +2766,7 @@ export default function App() {
                   )}
                   {settingsSection === "fo" && (
                     <>
+                      <h3 className="settings-pane-title">Fo</h3>
                       <p className="settings-group-label">Connection</p>
                       <div className="settings-card">
                         <div className="account-row">
@@ -2831,6 +2843,7 @@ export default function App() {
                   )}
                   {settingsSection === "privacy" && (
                     <>
+                      <h3 className="settings-pane-title">Privacy</h3>
                       <p className="settings-group-label">What’s shared</p>
                       <div className="settings-card">
                         <div className="settings-row stacked">
@@ -2862,6 +2875,7 @@ export default function App() {
                   )}
                   {settingsSection === "about" && (
                     <>
+                      <h3 className="settings-pane-title">About</h3>
                       <p className="settings-group-label">Pact</p>
                       <div className="settings-card">
                         <div className="settings-row">
