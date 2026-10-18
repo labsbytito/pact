@@ -87,6 +87,14 @@ import { renderMarkdown } from "../../lib/markdown";
 import { isImageMime } from "../../lib/images";
 import Companion, { type PactBlobHandle, type BlobState } from "./Companion";
 import { shouldGreet } from "./pactBlob";
+import { SiteAccessSettings } from "./SiteAccess";
+import {
+  rememberInvocation,
+  rememberObservedUrl,
+  rememberedSitePattern,
+  requestSiteRead,
+  SITE_ACCESS_DENIED,
+} from "../../lib/site-access";
 import {
   withCharacterSeeds,
   DEFAULT_COMPANION,
@@ -346,7 +354,8 @@ export default function App() {
       () =>
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches,
-    );
+    ),
+    [callConfirmed, setCallConfirmed] = useState(false);
   const dialog = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const interpretAbort = useRef<AbortController | null>(null);
@@ -531,7 +540,9 @@ export default function App() {
                 setClock(Date.now());
               }
             })
-            .catch(() => {})
+            .catch((e) => {
+              if (!cancelled) setError(errorText(e));
+            })
             .finally(() => {
               if (!cancelled) setCapturing(false);
             });
@@ -551,10 +562,19 @@ export default function App() {
     const invoked = (event: {
       type?: string;
       windowId?: number;
+      tabId?: number;
+      origin?: string;
       selection?: SelectionRequest;
     }) => {
       if (event.type !== "pact-invocation" && event.type !== "pact-selection")
         return;
+      if (event.selection)
+        rememberInvocation({
+          tabId: event.selection.tabId,
+          url: event.selection.url,
+        });
+      else
+        rememberInvocation({ tabId: event.tabId, origin: event.origin });
       void chrome.windows.getCurrent().then((window) => {
         const targetWindow = event.selection?.windowId ?? event.windowId;
         if (targetWindow !== window.id) return;
@@ -581,6 +601,21 @@ export default function App() {
       });
     };
     chrome.runtime.onMessage.addListener(invoked);
+    void chrome.windows.getCurrent().then(async (window) => {
+      const stored = await chrome.storage.session.get([
+        `pactInvocation:${window.id}`,
+        "pactInvocation",
+      ]);
+      const invocation = (stored[`pactInvocation:${window.id}`] ??
+        stored.pactInvocation) as
+        | { tabId?: number; origin?: string }
+        | undefined;
+      if (invocation)
+        rememberInvocation({
+          tabId: invocation.tabId,
+          origin: invocation.origin,
+        });
+    });
     return () => chrome.runtime.onMessage.removeListener(invoked);
   }, [selected]);
   useEffect(() => {
@@ -595,6 +630,7 @@ export default function App() {
         setPageStale(true);
     };
     const changed = (id: number, info: { url?: string; status?: string }) => {
+      if (info.url) rememberObservedUrl(id, info.url);
       if (
         currentSource?.tabId === id &&
         (info.url || info.status === "loading")
@@ -864,6 +900,19 @@ export default function App() {
     setDraft("");
     setError("");
   }
+  function readFromPanel(mode: CaptureMode = "page") {
+    // requestSiteRead runs before capture's awaits so this click stays the gesture.
+    void requestSiteRead(rememberedSitePattern()).then(
+      (granted) => {
+        if (!granted) {
+          setError(SITE_ACCESS_DENIED);
+          return;
+        }
+        void capture(mode);
+      },
+      (error) => setError(errorText(error)),
+    );
+  }
   async function capture(mode: CaptureMode = "page") {
     initialCaptureAllowed.current = false;
     const generation = ++captureGeneration.current,
@@ -874,6 +923,13 @@ export default function App() {
     try {
       const page = await capturePage(mode);
       if (generation !== captureGeneration.current) return;
+      const thin =
+        `${page.text || ""}${page.selection || ""}`.trim().length < 80 &&
+        !(page.transcript?.length);
+      if (thin)
+        setError(
+          "Pact found almost no readable text. Use Allow this site if this page is not allowed yet, or scroll to the article and read again.",
+        );
       if (targetId) {
         const latest = pactsRef.current.find((p) => p.id === targetId);
         if (latest) {
@@ -1124,6 +1180,7 @@ export default function App() {
       await update({ ...pact, action });
       const result = await api<{ runId: string }>("/actions/approve", {
         planId: action.planId,
+        ...(action.consequential ? { confirmConsequential: true } : {}),
       });
       await update({
         ...pact,
@@ -1338,6 +1395,7 @@ export default function App() {
       setDraftCompanion(companion);
       setEditorOpen(false);
     }
+    setCallConfirmed(false);
   };
   function openCompanionEditor() {
     setDraftCompanion(companion);
@@ -1626,6 +1684,11 @@ export default function App() {
             </button>
           </div>
         </header>
+        <p className="setting-description" role="status">
+          {companionOnline
+            ? `Claude key ${health.keyPresent ? "present" : "missing"}, model ${health.model ?? health.aiStatus?.model ?? "none"}, Fo ${health.fo ? "signed in" : health.needsReconnect ? "needs reconnect" : "signed out"}`
+            : "Companion offline. Start it with pnpm run server."}
+        </p>
         {view === "library" ? (
           <section className="library">
             <h1>My Pacts</h1>
@@ -1875,7 +1938,7 @@ export default function App() {
                     <button
                       className={`capture-card ${currentSource ? "captured" : ""}`}
                       onClick={() =>
-                        currentSource ? setSourceOpen(true) : void capture()
+                        currentSource ? setSourceOpen(true) : readFromPanel()
                       }
                       disabled={capturing}
                     >
@@ -2038,7 +2101,8 @@ export default function App() {
                                 Date.parse(active.action.expiresAt) < Date.now()
                                   ? void retryAI()
                                   : health.fo
-                                    ? setReviewOpen(true)
+                                    ? (setCallConfirmed(false),
+                                      setReviewOpen(true))
                                     : setSettingsOpen(true)
                               }
                             >
@@ -2047,7 +2111,9 @@ export default function App() {
                                 ? "Refresh next step"
                                 : health.fo
                                   ? "Review next step"
-                                  : "Connect Fo to continue"}
+                                  : health.needsReconnect
+                                    ? "Reconnect Fo to continue"
+                                    : "Connect Fo to continue"}
                               <ArrowUpRight size={18} />
                             </button>
                           </>
@@ -2175,19 +2241,30 @@ export default function App() {
               )}
               {error && (
                 <div className="error-banner" role="alert">
+                  <span className="status-dot" aria-hidden="true" />
                   <span>{error}</span>
+                  {/toolbar icon|Allow this site|permission to read this site|almost no readable text|PDF viewer/.test(
+                    error,
+                  ) && (
+                    <button
+                      className="text-button"
+                      onClick={() => readFromPanel(captureMode)}
+                    >
+                      Allow this site
+                    </button>
+                  )}
+                  {active && !busy && (
+                    <button className="text-button" onClick={retryAI}>
+                      Retry
+                    </button>
+                  )}
                   <button
                     className="icon-button"
                     aria-label="Dismiss message"
                     onClick={() => setError("")}
                   >
-                    <X size={17} />
+                    <X size={15} />
                   </button>
-                  {active && !busy && (
-                    <button className="text-button" onClick={retryAI}>
-                      <RotateCcw size={14} /> Retry reply
-                    </button>
-                  )}
                 </div>
               )}
               {!settings.onboarded && (
@@ -2216,7 +2293,7 @@ export default function App() {
               <div className="page-controls" aria-label="Page context controls">
                 <button
                   className="text-button"
-                  onClick={() => void capture("page")}
+                  onClick={() => readFromPanel("page")}
                   disabled={capturing}
                 >
                   <RotateCcw size={14} />
@@ -2224,7 +2301,7 @@ export default function App() {
                 </button>
                 <button
                   className="text-button"
-                  onClick={() => void capture("pick")}
+                  onClick={() => readFromPanel("pick")}
                   disabled={capturing}
                 >
                   <MousePointer2 size={14} />
@@ -2630,8 +2707,7 @@ export default function App() {
                     </label>
                   </div>
                   <p className="swatch-name">
-                    {companionSwatchName(draftCompanion.color)}
-                  </p>
+                    {companionSwatchName(draftCompanion.color)}                  </p>
                 </div>
                 <div className="editor-actions">
                   <button
@@ -2900,6 +2976,7 @@ export default function App() {
                           </span>
                         </div>
                       </div>
+                      <SiteAccessSettings />
                     </>
                   )}
                   {settingsSection === "about" && (
@@ -2969,9 +3046,9 @@ export default function App() {
                     )}
                     {currentSource.transcriptStatus === "unavailable" ? (
                       <p>
-                        Pact can see the page information, but hasn’t read the
-                        video’s speech. Open YouTube’s transcript, then capture
-                        the page again—or tell Pact what caught your eye.
+                        Pact can see the page information, but this video’s
+                        captions aren’t available. Tell Pact what caught your
+                        eye.
                       </p>
                     ) : (
                       currentSource.transcript
@@ -3017,7 +3094,7 @@ export default function App() {
                 </details>
                 <button
                   className="secondary full"
-                  onClick={() => void capture("page")}
+                  onClick={() => readFromPanel("page")}
                 >
                   Refresh from current page
                 </button>
@@ -3041,9 +3118,27 @@ export default function App() {
                   account. Fo may use your connected services. Review the
                   recipient and details carefully.
                 </p>
+                {active.action.consequential && (
+                  <>
+                    <p className="setting-description">
+                      This can place a real phone call or use an unfamiliar Fo
+                      tool. Confirm it separately before sending.
+                    </p>
+                    <button
+                      className="secondary full"
+                      onClick={() => setCallConfirmed(true)}
+                    >
+                      {callConfirmed
+                        ? "Separate confirmation recorded"
+                        : "Confirm this consequential action"}
+                    </button>
+                  </>
+                )}
                 <button
                   className="primary full"
-                  disabled={busy}
+                  disabled={
+                    busy || (!!active.action.consequential && !callConfirmed)
+                  }
                   onClick={execute}
                 >
                   Approve &amp; send to Fo

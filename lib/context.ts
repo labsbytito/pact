@@ -125,6 +125,7 @@ export function mergeReply(
       toolName: string;
       arguments: Record<string, unknown>;
       expiresAt?: string;
+      consequential?: boolean;
     };
   },
   id: string,

@@ -34,6 +34,7 @@ export type Action = {
   expiresAt?: string;
   toolName?: string;
   arguments?: Record<string, unknown>;
+  consequential?: boolean;
   status:
     | "proposed"
     | "approved"

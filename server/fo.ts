@@ -1,6 +1,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type {
   OAuthClientInformationMixed,
   OAuthTokens,
@@ -8,27 +13,10 @@ import type {
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { NotSubmittedError } from "./actions";
 import { randomBytes } from "node:crypto";
+
 const directory = new URL("../.local/", import.meta.url);
-const file = new URL("fo.json", directory);
 const endpoint = new URL("https://mcp.api.wajo.ai/fo");
 type Saved = { client?: OAuthClientInformationMixed; tokens?: OAuthTokens };
-let saved: Saved = {};
-try {
-  saved = JSON.parse(await readFile(file, "utf8"));
-} catch {}
-// Writes are serialized and snapshot `saved` when they run, so the last write always reflects the latest state (e.g. a disconnect).
-let writing: Promise<void> = Promise.resolve();
-function persist() {
-  const w = writing
-    .catch(() => {})
-    .then(async () => {
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      await writeFile(file, JSON.stringify(saved), { mode: 0o600 });
-    });
-  writing = w;
-  return w;
-}
-// Each connect attempt/disconnect starts a new generation. A provider is bound to one generation and becomes inert once superseded.
 type Attempt = {
   gen: number;
   verifier: string;
@@ -36,182 +24,365 @@ type Attempt = {
   url?: string;
   startedAt: number;
 };
-let generation = 0;
-let attempt: Attempt = { gen: 0, verifier: "", state: "", startedAt: 0 };
-let client: Client | undefined;
-let pending: Client | undefined;
-let tools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
-const cancelled = () =>
-  new Error("Fo connection was cancelled. Connect again in Pact.");
-function makeProvider(a: Attempt): OAuthClientProvider {
-  const live = () => a.gen === generation;
-  const guard = () => {
-    if (!live()) throw cancelled();
-  };
-  return {
-    redirectUrl: "http://127.0.0.1:4317/oauth/callback",
-    clientMetadata: {
-      client_name: "Pact local companion",
-      redirect_uris: ["http://127.0.0.1:4317/oauth/callback"],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      token_endpoint_auth_method: "none",
-      scope: "mcp",
-    },
-    state() {
-      guard();
-      if (!a.state) a.state = randomBytes(32).toString("hex");
-      return a.state;
-    },
-    clientInformation: () => (live() ? saved.client : undefined),
-    async saveClientInformation(info) {
-      guard();
-      saved.client = info;
-      await persist();
-    },
-    tokens: () => (live() ? saved.tokens : undefined),
-    async saveTokens(tokens) {
-      guard();
-      saved.tokens = tokens;
-      await persist();
-    },
-    redirectToAuthorization(url) {
-      guard();
-      a.url = url.href;
-    },
-    saveCodeVerifier(value) {
-      guard();
-      a.verifier = value;
-    },
-    codeVerifier() {
-      guard();
-      if (!a.verifier)
-        throw new Error("Connection expired. Start again in Pact.");
-      return a.verifier;
-    },
-    async invalidateCredentials(scope) {
-      guard();
-      if (scope === "all" || scope === "tokens") delete saved.tokens;
-      if (scope === "all" || scope === "client") delete saved.client;
-      if (scope === "all" || scope === "verifier") a.verifier = "";
-      await persist();
-    },
-  };
-}
-let provider = makeProvider(attempt);
-// Supersede everything in flight: new generation, fresh provider, pending state/verifier dropped, in-flight client closed.
-function supersede() {
-  generation++;
-  attempt = { gen: generation, verifier: "", state: "", startedAt: 0 };
-  provider = makeProvider(attempt);
-  const old = pending;
-  pending = undefined;
-  return old;
-}
-async function closeQuietly(c?: Client) {
-  try {
-    await c?.close();
-  } catch {}
-}
-async function connect(a: Attempt, p: OAuthClientProvider) {
-  if (a.gen !== generation) throw cancelled();
-  const c = new Client({ name: "pact", version: "0.1.0" });
-  const t = new StreamableHTTPClientTransport(endpoint, { authProvider: p });
-  pending = c;
-  try {
-    await c.connect(t);
-    const list = (await c.listTools()).tools;
-    if (a.gen !== generation) throw cancelled();
-    const previous = client;
-    client = c;
-    tools = list;
-    pending = undefined;
-    if (previous && previous !== c) await closeQuietly(previous);
-    return c;
-  } catch (e) {
-    if (pending === c) pending = undefined;
-    await closeQuietly(c);
-    throw e;
-  }
-}
-export function foStatus() {
-  return {
-    fo: !!client,
-    tools: tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    })),
-  };
-}
-export async function beginFo() {
-  if (client) return { connected: true };
-  await closeQuietly(supersede());
-  const a = attempt,
-    p = provider;
-  a.startedAt = Date.now();
-  try {
-    await connect(a, p);
-    return { connected: true };
-  } catch (e) {
-    if (a.gen === generation && a.url) return { url: a.url };
-    throw e;
-  }
-}
-export async function finishFo(code: string, returnedState: string) {
-  const a = attempt,
-    p = provider;
+export type FoTool = {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+};
+type FoClient = {
+  connect(transport: unknown): Promise<void>;
+  listTools(): Promise<{ tools: FoTool[] }>;
+  callTool(
+    params: { name: string; arguments?: Record<string, unknown> },
+    resultSchema: undefined,
+    options: { timeout: number },
+  ): Promise<unknown>;
+  close(): Promise<void>;
+};
+type FoTransport = {
+  finishAuth(code: string): Promise<void>;
+};
+const AUTH_CODES = new Set(["invalid_grant", "invalid_token", "unauthorized"]);
+
+// Transport failures only. A tool result that mentions authorization is not an auth rejection:
+// Fo already accepted that call, and the runner decides whether the outcome is known.
+export function isAuthRejection(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  if (error instanceof UnauthorizedError) return true;
+  if (error instanceof StreamableHTTPError && error.code === 401) return true;
   if (
-    !a.state ||
-    returnedState !== a.state ||
-    Date.now() - a.startedAt > 600000
+    error instanceof OAuthError &&
+    AUTH_CODES.has(String(error.errorCode))
   )
-    throw new Error(
-      "Connection request expired or did not match. Return to Pact and connect again.",
-    );
-  const t = new StreamableHTTPClientTransport(endpoint, { authProvider: p });
-  await t.finishAuth(code);
-  if (a.gen !== generation) throw cancelled();
-  a.state = "";
-  a.verifier = "";
-  await connect(a, p);
+    return true;
+  const value = error as {
+    name?: unknown;
+    message?: unknown;
+    code?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+    error?: unknown;
+    errorCode?: unknown;
+  };
+  if (value.name === "UnauthorizedError") return true;
+  if (value.code === 401 || value.status === 401 || value.statusCode === 401)
+    return true;
+  const oauth =
+    typeof value.error === "string"
+      ? value.error
+      : typeof value.errorCode === "string"
+        ? value.errorCode
+        : "";
+  if (AUTH_CODES.has(oauth)) return true;
+  const message = typeof value.message === "string" ? value.message : "";
+  if (
+    /^unauthorized$/i.test(message.trim()) ||
+    /\binvalid_grant\b|\binvalid_token\b|failed to (?:re-)?authenticate|authentication failed|failed to authorize|authentication requires user authorization|server returned 401\b/i.test(
+      message,
+    )
+  )
+    return true;
+  return false;
 }
-export async function disconnectFo() {
-  const old = pending;
-  const current = client;
-  supersede();
-  client = undefined;
-  tools = [];
-  delete saved.tokens;
-  await Promise.all([closeQuietly(old), closeQuietly(current)]);
-  await persist();
-}
-export async function callFo(name: string, args: Record<string, unknown>) {
-  if (!client)
-    throw new NotSubmittedError(
-      "Fo isn't connected. Reconnect Fo in Pact. This request was not sent.",
-    );
-  if (!tools.some((t) => t.name === name))
-    throw new NotSubmittedError(
-      "This Fo tool is not available. This request was not sent.",
-    );
-  return client.callTool({ name, arguments: args }, undefined, {
-    timeout: 300000,
-  });
-}
-export async function restoreFo() {
-  if (!saved.tokens) return;
-  const a = attempt,
-    p = provider;
+
+export async function createFoConnection(options: {
+  directory: URL;
+  endpoint?: URL;
+  createClient: () => FoClient;
+  createTransport: (endpoint: URL, authProvider: OAuthClientProvider) => FoTransport;
+}) {
+  const base = options.directory.href.endsWith("/")
+    ? options.directory
+    : new URL(`${options.directory.href}/`);
+  const file = new URL("fo.json", base);
+  const target = options.endpoint ?? endpoint;
+  let saved: Saved = {};
   try {
+    const parsed = JSON.parse(await readFile(file, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+      saved = parsed;
+  } catch {
+    saved = {};
+  }
+  // Writes are serialized and freeze `saved` when they are scheduled, so the last write always reflects the latest state (e.g. a disconnect).
+  let writing: Promise<void> = Promise.resolve();
+  function persist() {
+    const json = JSON.stringify(saved);
+    const w = writing.catch(() => {}).then(async () => {
+      await mkdir(base, { recursive: true, mode: 0o700 });
+      await writeFile(file, json, { mode: 0o600 });
+    });
+    writing = w;
+    return w;
+  }
+  // Each connect attempt/disconnect starts a new generation. A provider is bound to one generation and becomes inert once superseded.
+  let generation = 0;
+  let attempt: Attempt = { gen: 0, verifier: "", state: "", startedAt: 0 };
+  let client: FoClient | undefined;
+  let pending: FoClient | undefined;
+  let tools: FoTool[] = [];
+  let needsReconnect = false;
+  const cancelled = () =>
+    new Error("Fo connection was cancelled. Connect again in Pact.");
+  function makeProvider(a: Attempt): OAuthClientProvider {
+    const live = () => a.gen === generation;
+    const guard = () => {
+      if (!live()) throw cancelled();
+    };
+    return {
+      redirectUrl: "http://127.0.0.1:4317/oauth/callback",
+      clientMetadata: {
+        client_name: "Pact local companion",
+        redirect_uris: ["http://127.0.0.1:4317/oauth/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        scope: "mcp",
+      },
+      state() {
+        guard();
+        if (!a.state) a.state = randomBytes(32).toString("hex");
+        return a.state;
+      },
+      clientInformation: () => (live() ? saved.client : undefined),
+      async saveClientInformation(info) {
+        guard();
+        saved = { ...saved, client: info };
+        await persist();
+      },
+      tokens: () => (live() ? saved.tokens : undefined),
+      async saveTokens(tokens) {
+        guard();
+        saved = { ...saved, tokens };
+        await persist();
+      },
+      redirectToAuthorization(url) {
+        guard();
+        a.url = url.href;
+      },
+      saveCodeVerifier(value) {
+        guard();
+        a.verifier = value;
+      },
+      codeVerifier() {
+        guard();
+        if (!a.verifier)
+          throw new Error("Connection expired. Start again in Pact.");
+        return a.verifier;
+      },
+      async invalidateCredentials(scope) {
+        guard();
+        const next = { ...saved };
+        if (scope === "all" || scope === "tokens") delete next.tokens;
+        if (scope === "all" || scope === "client") delete next.client;
+        saved = next;
+        if (scope === "all" || scope === "verifier") a.verifier = "";
+        await persist();
+      },
+    };
+  }
+  let provider = makeProvider(attempt);
+  // Supersede everything in flight: new generation, fresh provider, pending state/verifier dropped, in-flight client closed.
+  function supersede() {
+    generation++;
+    attempt = { gen: generation, verifier: "", state: "", startedAt: 0 };
+    provider = makeProvider(attempt);
+    const old = pending;
+    pending = undefined;
+    return old;
+  }
+  async function closeQuietly(c?: FoClient) {
+    try {
+      await c?.close();
+    } catch {
+      /* Closing a failed session should not hide the outcome. */
+    }
+  }
+  async function connect(a: Attempt, p: OAuthClientProvider) {
+    if (a.gen !== generation) throw cancelled();
+    const c = options.createClient();
+    const t = options.createTransport(target, p);
+    pending = c;
+    try {
+      await c.connect(t);
+      const list = (await c.listTools()).tools;
+      if (a.gen !== generation) throw cancelled();
+      const previous = client;
+      client = c;
+      tools = list;
+      pending = undefined;
+      if (previous && previous !== c) await closeQuietly(previous);
+      return c;
+    } catch (e) {
+      if (pending === c) pending = undefined;
+      await closeQuietly(c);
+      throw e;
+    }
+  }
+  async function expireIfCurrent(seen: number) {
+    if (seen !== generation) return;
+    const oldPending = supersede();
+    const current = client;
+    client = undefined;
+    tools = [];
+    const next = { ...saved };
+    delete next.tokens;
+    saved = next;
+    needsReconnect = true;
+    await Promise.all([
+      closeQuietly(oldPending),
+      closeQuietly(current),
+      persist(),
+    ]);
+  }
+  function status() {
+    return {
+      fo: !!client,
+      needsReconnect: !client && needsReconnect,
+      tools: tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      })),
+    };
+  }
+  async function attemptConnect(
+    allowAuthRetry: boolean,
+  ): Promise<{ connected: true } | { url: string }> {
+    await closeQuietly(supersede());
+    const a = attempt;
+    const p = provider;
+    a.startedAt = Date.now();
+    try {
+      await connect(a, p);
+      needsReconnect = false;
+      return { connected: true };
+    } catch (e) {
+      if (a.gen !== generation) throw cancelled();
+      if (a.url) return { url: a.url };
+      if (allowAuthRetry && isAuthRejection(e)) {
+        needsReconnect = true;
+        if (a.gen === generation) {
+          const next = { ...saved };
+          delete next.tokens;
+          saved = next;
+          await persist();
+        }
+        if (a.gen !== generation) throw cancelled();
+        return attemptConnect(false);
+      }
+      throw e;
+    }
+  }
+  async function begin() {
+    if (client) return { connected: true as const };
+    return attemptConnect(true);
+  }
+  async function finish(code: string, returnedState: string) {
+    const a = attempt;
+    const p = provider;
+    if (
+      !a.state ||
+      returnedState !== a.state ||
+      Date.now() - a.startedAt > 600000
+    )
+      throw new Error(
+        "Connection request expired or did not match. Return to Pact and connect again.",
+      );
+    const t = options.createTransport(target, p);
+    await t.finishAuth(code);
+    if (a.gen !== generation) throw cancelled();
+    a.state = "";
+    a.verifier = "";
     await connect(a, p);
-  } catch (e) {
-    if (a.gen === generation) {
+    needsReconnect = false;
+  }
+  async function disconnect() {
+    const old = pending;
+    const current = client;
+    supersede();
+    client = undefined;
+    tools = [];
+    needsReconnect = false;
+    const next = { ...saved };
+    delete next.tokens;
+    saved = next;
+    await Promise.all([closeQuietly(old), closeQuietly(current)]);
+    await persist();
+  }
+  async function call(name: string, args: Record<string, unknown>) {
+    if (!client)
+      throw new NotSubmittedError(
+        "Fo isn't connected. Reconnect Fo in Pact. This request was not sent.",
+      );
+    if (!tools.some((tool) => tool.name === name))
+      throw new NotSubmittedError(
+        "This Fo tool is not available. This request was not sent.",
+      );
+    const seen = generation;
+    const current = client;
+    try {
+      return await current.callTool({ name, arguments: args }, undefined, {
+        timeout: 300000,
+      });
+    } catch (e) {
+      if (!isAuthRejection(e)) throw e;
+      // The transport rejected the call. Fo did not return a tool result, so this was not accepted.
+      await expireIfCurrent(seen);
+      throw new NotSubmittedError(
+        "Fo rejected this request before accepting it. Reconnect Fo in Pact. This request was not sent.",
+      );
+    }
+  }
+  async function restore() {
+    if (!saved.tokens) return;
+    const a = attempt;
+    const p = provider;
+    const seen = a.gen;
+    try {
+      await connect(a, p);
+      if (seen === generation) needsReconnect = false;
+    } catch (e) {
+      if (seen !== generation) return;
+      if (isAuthRejection(e)) {
+        console.warn("Fo restore failed: sign-in expired");
+        await expireIfCurrent(seen);
+        return;
+      }
       client = undefined;
+      tools = [];
       console.warn(
         "Fo restore failed:",
         e instanceof Error ? e.message : "unknown error",
       );
     }
   }
+  return { status, begin, finish, disconnect, call, restore };
+}
+
+const connection = await createFoConnection({
+  directory,
+  endpoint,
+  createClient: () =>
+    new Client({ name: "pact", version: "0.1.0" }) as unknown as FoClient,
+  createTransport: (url, authProvider) =>
+    new StreamableHTTPClientTransport(url, { authProvider }),
+});
+export function foStatus() {
+  return connection.status();
+}
+export function beginFo() {
+  return connection.begin();
+}
+export function finishFo(code: string, returnedState: string) {
+  return connection.finish(code, returnedState);
+}
+export function disconnectFo() {
+  return connection.disconnect();
+}
+export function callFo(name: string, args: Record<string, unknown>) {
+  return connection.call(name, args);
+}
+export function restoreFo() {
+  return connection.restore();
 }

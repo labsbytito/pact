@@ -1942,29 +1942,50 @@ a {
   height: 28px;
 }
 .error-banner {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: var(--danger-bg);
-  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
-  border-radius: var(--r-md);
-  color: var(--danger);
-  font-size: var(--t-callout);
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100% - 8px);
+  margin: 0 4px 10px;
+  padding: 5px 10px 5px 8px;
+  border-radius: var(--r-full);
+  background: var(--bg-elevated);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--glass-shadow);
+  color: var(--text-2);
+  font-size: var(--t-caption);
 }
 .error-banner > span {
-  flex: 1;
-  min-width: 140px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.error-banner .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex-shrink: 0;
 }
 .error-banner .icon-button,
 .error-banner .text-button {
-  color: var(--danger);
+  flex-shrink: 0;
+  color: var(--text-1);
 }
 .error-banner .icon-button {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+}
+.error-banner .text-button {
+  min-height: 24px;
+  padding: 0 2px;
+  font-size: var(--t-sm);
+  font-weight: 500;
 }
 .page-controls {
   display: flex;
