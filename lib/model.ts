@@ -60,6 +60,14 @@ export type Pact = {
   action?: Action;
   actions?: Action[];
   archived?: boolean;
+  pinned?: boolean;
+  /** User-created section / folder id. */
+  sectionId?: string | null;
+};
+export type PactSection = {
+  id: string;
+  name: string;
+  createdAt: string;
 };
 export type ThemePreference = "system" | "light" | "dark";
 export type Settings = {

@@ -1,5 +1,11 @@
 import { supersedeProposal, mergeReply, unresolved } from "../../lib/context";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import {
   ArrowUp,
   ArrowUpRight,
@@ -33,10 +39,14 @@ import {
   RefreshCw,
   Pencil,
   Camera,
+  MoreHorizontal,
+  Pin,
+  FolderInput,
 } from "lucide-react";
 import type {
   Action,
   Pact,
+  PactSection,
   Source,
   Settings,
   ThemePreference,
@@ -51,6 +61,8 @@ import {
   approve,
 } from "../../lib/model";
 import { read, write, readSync, writeSync } from "../../lib/storage";
+import { groupLibraryPacts, normalizeSections } from "../../lib/library";
+import PactMenu, { type PactMenuAction } from "./PactMenu";
 import {
   capturePage,
   pendingSelection,
@@ -293,8 +305,28 @@ export default function App() {
     [streamText, setStreamText] = useState(""),
     [attachMenu, setAttachMenu] = useState(false),
     [editingMessageId, setEditingMessageId] = useState<string>(),
+    [sections, setSections] = useState<PactSection[]>([]),
+    [renamingId, setRenamingId] = useState<string>(),
+    [renameDraft, setRenameDraft] = useState(""),
+    [menu, setMenu] = useState<{
+      pactId: string;
+      x: number;
+      y: number;
+      origin: string;
+    } | null>(null),
+    [toast, setToast] = useState<{
+      id: number;
+      message: string;
+      undo: () => void;
+    } | null>(null),
+    [scrolledMain, setScrolledMain] = useState(false),
+    [scrolledComposer, setScrolledComposer] = useState(false),
+    [showSkeleton, setShowSkeleton] = useState(false),
+    [uiReady, setUiReady] = useState(false),
+    [menuExiting, setMenuExiting] = useState(false),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
+    [healthChecked, setHealthChecked] = useState(false),
     [connecting, setConnecting] = useState(false),
     [authUrl, setAuthUrl] = useState<string>(),
     [companion, setCompanion] = useState<CompanionAppearance>(DEFAULT_COMPANION),
@@ -323,16 +355,24 @@ export default function App() {
   const darkScheme = effectiveDark(settings.theme, systemDark);
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
-  const searchNeedle = search.toLowerCase().trim();
-  const matchesSearch = (p: Pact) => {
-    if (!searchNeedle) return true;
-    if (`${p.title} ${p.intention}`.toLowerCase().includes(searchNeedle))
-      return true;
-    return p.messages.some((m) => m.text.toLowerCase().includes(searchNeedle));
-  };
-  const visible = pacts.filter(
-    (p) => !!p.archived === archived && matchesSearch(p),
-  );
+  const libraryGroups = groupLibraryPacts(pacts, sections, {
+    archived,
+    query: search,
+  });
+  const sidebarGroups = groupLibraryPacts(pacts, sections, {
+    archived: false,
+    query: search,
+  });
+  const menuPact = menu
+    ? pacts.find((p) => p.id === menu.pactId)
+    : undefined;
+  const healthBanner = !healthChecked
+    ? ""
+    : !companionOnline
+      ? "Local companion offline — run pnpm server, then retry."
+      : !health.ai
+        ? "AI offline — set ANTHROPIC_API_KEY or PACT_AI=claude-code in .env, restart pnpm server."
+        : "";
   const statusLabel = capturing
     ? "Reading page…"
     : busy && !streamText
@@ -396,8 +436,9 @@ export default function App() {
       read<Settings>("settings", { onboarded: false }),
       read<string | null>("activePact", null),
       readSync<unknown>("companion", DEFAULT_COMPANION),
+      read<unknown>("sections", []),
     ])
-      .then(([stored, s, last, savedCompanion]) => {
+      .then(([stored, s, last, savedCompanion, savedSections]) => {
         if (cancelled) return;
         const p = withCharacterSeeds(stored);
         setPacts(p);
@@ -405,6 +446,7 @@ export default function App() {
         if (stored.some((item) => !item.characterSeed))
           void save(p).catch(() => {});
         setSettings(s);
+        setSections(normalizeSections(savedSections));
         const appearance = normalizeCompanion(savedCompanion);
         setCompanion(appearance);
         setDraftCompanion(appearance);
@@ -525,7 +567,82 @@ export default function App() {
       setCompanionOnline(true);
     } catch {
       setCompanionOnline(false);
+    } finally {
+      setHealthChecked(true);
     }
+  }
+  async function saveSections(next: PactSection[]) {
+    setSections(next);
+    await write("sections", next);
+  }
+  function showUndo(message: string, undo: () => void) {
+    const id = Date.now();
+    setToast({ id, message, undo });
+    window.setTimeout(() => {
+      setToast((current) => (current?.id === id ? null : current));
+    }, 5000);
+  }
+  async function applyPactMenu(pact: Pact, action: PactMenuAction) {
+    if (action.type === "pin") {
+      await update({ ...pact, pinned: !pact.pinned });
+      return;
+    }
+    if (action.type === "rename") {
+      setRenamingId(pact.id);
+      setRenameDraft(pact.title);
+      return;
+    }
+    if (action.type === "archive") {
+      const nextArchived = !pact.archived;
+      const snapshot = { ...pact };
+      await update({ ...pact, archived: nextArchived });
+      if (selected === pact.id && nextArchived) {
+        setSelected(undefined);
+        setView("library");
+      }
+      showUndo(
+        nextArchived ? "Pact archived · Undo" : "Pact restored · Undo",
+        () => {
+          void update(snapshot);
+        },
+      );
+      return;
+    }
+    if (action.type === "delete") {
+      const snapshot = pactsRef.current.slice();
+      const next = snapshot.filter((p) => p.id !== pact.id);
+      await save(next);
+      if (selected === pact.id) {
+        setSelected(undefined);
+        setView("library");
+      }
+      showUndo("Pact deleted · Undo", () => {
+        void save(snapshot);
+      });
+      return;
+    }
+    if (action.type === "move") {
+      await update({ ...pact, sectionId: action.sectionId });
+      return;
+    }
+    if (action.type === "new-section") {
+      const name = window.prompt("Section name");
+      if (!name?.trim()) return;
+      const section: PactSection = {
+        id: uid(),
+        name: name.trim().slice(0, 60),
+        createdAt: now(),
+      };
+      await saveSections([...sections, section]);
+      await update({ ...pact, sectionId: section.id });
+    }
+  }
+  async function commitRename(pactId: string) {
+    const pact = pactsRef.current.find((p) => p.id === pactId);
+    const title = renameDraft.trim().slice(0, 72);
+    setRenamingId(undefined);
+    if (!pact || !title || title === pact.title) return;
+    await update({ ...pact, title });
   }
   useEffect(() => {
     void refreshHealth();
@@ -537,6 +654,50 @@ export default function App() {
       window.removeEventListener("focus", focus);
     };
   }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowSkeleton(true), 200);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (!loaded || uiReady) return;
+    if (!showSkeleton) {
+      setUiReady(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setUiReady(true), 400);
+    return () => window.clearTimeout(timer);
+  }, [loaded, showSkeleton, uiReady]);
+  function closeMenu() {
+    if (!menu || menuExiting) return;
+    setMenuExiting(true);
+    window.setTimeout(() => {
+      setMenu(null);
+      setMenuExiting(false);
+    }, 100);
+  }
+  function openPactMenuAt(
+    event: MouseEvent,
+    pactId: string,
+    mode: "dots" | "context",
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect =
+      mode === "dots"
+        ? (event.currentTarget as HTMLElement).getBoundingClientRect()
+        : null;
+    const x = rect ? Math.min(rect.left, window.innerWidth - 220) : event.clientX;
+    const y = rect ? rect.bottom + 4 : event.clientY;
+    const originX = x + 110 > window.innerWidth / 2 ? "right" : "left";
+    const originY = y > window.innerHeight / 2 ? "bottom" : "top";
+    setMenuExiting(false);
+    setMenu({
+      pactId,
+      x,
+      y,
+      origin: `${originY} ${originX}`,
+    });
+  }
   useEffect(() => {
     end.current?.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -682,9 +843,11 @@ export default function App() {
     const controller = new AbortController();
     interpretAbort.current = controller;
     let live = "";
+    const preferStream = health.aiStatus?.provider === "anthropic-api";
     try {
       const result = await interpretLive(p, pending, {
         signal: controller.signal,
+        preferStream,
         onDelta: (chunk) => {
           live += chunk;
           setStreamText(live);
@@ -695,28 +858,26 @@ export default function App() {
       await refreshHealth();
     } catch (e) {
       const partial =
+        e instanceof AbortInterpretError ? e.partial.trim() : live.trim();
+      const userStopped =
         e instanceof AbortInterpretError
-          ? e.partial.trim()
-          : live.trim();
-      if (e instanceof AbortInterpretError || (partial && controller.signal.aborted)) {
-        if (partial) {
-          const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
-          await update(
-            mergeReply(
-              latest,
-              { reply: partial, stopped: true },
-              uid(),
-              now(),
-            ),
-          );
-        }
+          ? e.userInitiated || controller.signal.aborted
+          : controller.signal.aborted;
+      if (partial) {
+        const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
+        await update(
+          mergeReply(
+            latest,
+            { reply: partial, stopped: true },
+            uid(),
+            now(),
+          ),
+        );
+      }
+      if (userStopped && e instanceof AbortInterpretError) {
+        if (!partial)
+          setError("Stopped before a reply started.");
       } else {
-        if (partial) {
-          const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
-          await update(
-            mergeReply(latest, { reply: partial, stopped: true }, uid(), now()),
-          );
-        }
         setError(errorText(e));
       }
     } finally {
@@ -1093,10 +1254,26 @@ export default function App() {
   }
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (e.key === "F2" && selected && !renamingId && !busy) {
+        const pact = pactsRef.current.find((p) => p.id === selected);
+        if (!pact) return;
+        e.preventDefault();
+        setRenamingId(pact.id);
+        setRenameDraft(pact.title);
+        return;
+      }
       if (e.key === "Escape") {
         if (busy) {
           e.preventDefault();
           stopInterpret();
+          return;
+        }
+        if (renamingId) {
+          setRenamingId(undefined);
+          return;
+        }
+        if (menu) {
+          closeMenu();
           return;
         }
         if (attachMenu) {
@@ -1106,14 +1283,24 @@ export default function App() {
         closeDialog();
       }
     }
+    function dismissMenu() {
+      closeMenu();
+    }
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [busy, attachMenu]);
-  if (!loaded)
+    window.addEventListener("click", dismissMenu);
+    return () => {
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("click", dismissMenu);
+    };
+  }, [busy, attachMenu, menu, menuExiting, renamingId, selected]);
+  if (!uiReady)
     return (
-      <div className="boot">
-        <Companion appearance={companion} dark={darkScheme} thinking />
-        <p>Finding your Pacts…</p>
+      <div className={`boot${showSkeleton ? "" : " boot-quiet"}`} aria-busy="true">
+        <div className="skeleton-row short" />
+        <div className="skeleton-row mid" />
+        <div className="skeleton-row wide" />
+        <div className="skeleton-row mid" />
+        <div className="skeleton-row wide" />
       </div>
     );
   return (
@@ -1151,33 +1338,68 @@ export default function App() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
-        <p className="recent-label">Recent</p>
         <div className="recent-list">
-          {pacts
-            .filter((p) => !p.archived && matchesSearch(p))
-            .slice(0, 30)
-            .map((p, i) => (
-              <button
-                key={p.id}
-                className={`recent ${selected === p.id && view === "chat" ? "selected" : ""}`}
-                onClick={() => openPact(p)}
-              >
-                <span className={`thread-avatar tone-${i % 4}`}>
-                  <Companion seed={p.characterSeed ?? p.id} size="small" />
-                </span>
-                <span>
-                  <strong>{p.title}</strong>
-                  <small>
-                    {p.action && unresolved(p.action)
-                      ? statusText(p.action)
-                      : (p.messages.at(-1)?.text ?? p.intention)}
-                  </small>
-                </span>
-                {p.action?.status === "running" && (
-                  <span className="status-light" />
-                )}
-              </button>
-            ))}
+          {sidebarGroups.map((group) =>
+            !group.pacts.length ? null : (
+              <div key={group.id ?? "root"} className="library-group">
+                <p className="recent-label">
+                  {group.id === "__pinned__" ? "Pinned" : group.name}
+                </p>
+                {group.pacts.slice(0, 30).map((p) => (
+                  <div
+                    key={p.id}
+                    className={`recent-row ${selected === p.id && view === "chat" ? "selected" : ""}`}
+                    onContextMenu={(e) => openPactMenuAt(e, p.id, "context")}
+                  >
+                    {renamingId === p.id ? (
+                      <input
+                        className="rename-input"
+                        value={renameDraft}
+                        aria-label="Rename Pact"
+                        autoFocus
+                        ref={(node) => node?.select()}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onBlur={() => void commitRename(p.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void commitRename(p.id);
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            setRenamingId(undefined);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="recent"
+                        onClick={() => openPact(p)}
+                      >
+                        <strong className="recent-title">{p.title}</strong>
+                        <time className="recent-meta">
+                          {new Date(p.updatedAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </time>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="icon-button pact-more"
+                      data-open={menu?.pactId === p.id ? "true" : undefined}
+                      aria-label={`Actions for ${p.title}`}
+                      onClick={(e) => openPactMenuAt(e, p.id, "dots")}
+                    >
+                      <MoreHorizontal size={16} strokeWidth={ICON} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ),
+          )}
           {!pacts.filter((p) => !p.archived).length && (
             <p className="quiet-empty">Your conversations will appear here.</p>
           )}
@@ -1202,7 +1424,7 @@ export default function App() {
         </div>
       </aside>
       <main className="main-pane">
-        <header className="topbar">
+        <header className={`topbar${scrolledMain ? " frosted" : ""}`}>
           <button
             className="mobile-brand"
             onClick={newPact}
@@ -1276,7 +1498,6 @@ export default function App() {
         {view === "library" ? (
           <section className="library">
             <h1>My Pacts</h1>
-            <p>Pick up where you left off.</p>
             <div className="library-controls">
               <label className="search-box">
                 <Search size={18} />
@@ -1294,50 +1515,125 @@ export default function App() {
                 <Archive size={17} />
                 {archived ? "Archived" : "Archive"}
               </button>
+              <button
+                className="text-button"
+                onClick={async () => {
+                  const name = window.prompt("Section name");
+                  if (!name?.trim()) return;
+                  await saveSections([
+                    ...sections,
+                    {
+                      id: uid(),
+                      name: name.trim().slice(0, 60),
+                      createdAt: now(),
+                    },
+                  ]);
+                }}
+              >
+                <FolderInput size={17} strokeWidth={ICON} />
+                Section
+              </button>
             </div>
-            <div className="pact-grid">
-              {visible.map((p, i) => (
-                <button
-                  className="pact-tile"
-                  key={p.id}
-                  onClick={() => openPact(p)}
-                >
-                  <span className={`tile-avatar tone-${i % 4}`}>
-                    <Companion seed={p.characterSeed ?? p.id} size="normal" />
-                  </span>
-                  <span className="tile-copy">
-                    <span className="tile-heading">
-                      <strong>{p.title}</strong>
-                      <time>
-                        {new Date(p.updatedAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </time>
-                    </span>
-                    <span className="tile-preview">
-                      {p.messages.at(-1)?.text ?? p.intention}
-                    </span>
-                    <span className="tile-footer">
-                      {host(p.source) || statusText(p.action)}
-                      {p.action && unresolved(p.action) && (
-                        <span className="run-label">
-                          {statusText(p.action)}
-                        </span>
+            {libraryGroups.map((group) =>
+              !group.pacts.length && group.id === null ? null : (
+                <div key={group.id ?? "root"} className="library-group">
+                  <div className="library-group-head">
+                    <h2>{group.name}</h2>
+                    {group.id &&
+                      group.id !== "__pinned__" &&
+                      sections.some((s) => s.id === group.id) && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                `Delete section “${group.name}”? Pacts stay in the list.`,
+                              )
+                            )
+                              return;
+                            await saveSections(
+                              sections.filter((s) => s.id !== group.id),
+                            );
+                            await save(
+                              pactsRef.current.map((p) =>
+                                p.sectionId === group.id
+                                  ? { ...p, sectionId: null }
+                                  : p,
+                              ),
+                            );
+                          }}
+                        >
+                          Delete section
+                        </button>
                       )}
-                    </span>
-                  </span>
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-            </div>
-            {!visible.length && (
+                  </div>
+                  <div className="pact-grid">
+                    {group.pacts.map((p) => (
+                      <div
+                        key={p.id}
+                        className="pact-tile-wrap"
+                        onContextMenu={(e) => openPactMenuAt(e, p.id, "context")}
+                      >
+                        {renamingId === p.id ? (
+                          <input
+                            className="rename-input"
+                            value={renameDraft}
+                            aria-label="Rename Pact"
+                            autoFocus
+                            ref={(node) => node?.select()}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onBlur={() => void commitRename(p.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void commitRename(p.id);
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setRenamingId(undefined);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="pact-tile"
+                            onClick={() => openPact(p)}
+                          >
+                            <strong className="recent-title">
+                              {p.pinned ? (
+                                <>
+                                  <Pin size={12} strokeWidth={ICON} />{" "}
+                                </>
+                              ) : null}
+                              {p.title}
+                            </strong>
+                            <time className="recent-meta">
+                              {new Date(p.updatedAt).toLocaleDateString(
+                                undefined,
+                                { month: "short", day: "numeric" },
+                              )}
+                            </time>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="icon-button pact-more"
+                          data-open={menu?.pactId === p.id ? "true" : undefined}
+                          aria-label={`Actions for ${p.title}`}
+                          onClick={(e) => openPactMenuAt(e, p.id, "dots")}
+                        >
+                          <MoreHorizontal size={16} strokeWidth={ICON} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ),
+            )}
+            {!libraryGroups.some((g) => g.pacts.length) && (
               <div className="library-empty">
-                <Companion
-                  appearance={companion}
-                  dark={darkScheme}
-                  size="normal"
-                />
                 <h2>
                   {search
                     ? "No matching conversations"
@@ -1352,34 +1648,60 @@ export default function App() {
                       ? "Archived Pacts will appear here."
                       : "Start a conversation. Come back to it anytime."}
                 </p>
-                <button className="primary" onClick={newPact}>
-                  <Plus size={17} /> Make a Pact
-                </button>
+                <div className="suggestions" aria-label="Suggestions">
+                  {!archived && (
+                    <button type="button" onClick={newPact}>
+                      Make a Pact
+                    </button>
+                  )}
+                  {search ? (
+                    <button type="button" onClick={() => setSearch("")}>
+                      Clear search
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setArchived(!archived)}
+                    >
+                      {archived ? "Show active" : "Show archive"}
+                    </button>
+                  )}
+                  {!archived && !search && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setView("chat");
+                        setSelected(undefined);
+                      }}
+                    >
+                      Ask about this page
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </section>
         ) : (
           <>
-            <div className="conversation-scroll">
+            <div
+              className="conversation-scroll"
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                setScrolledMain(el.scrollTop > 4);
+                setScrolledComposer(
+                  el.scrollHeight - el.scrollTop - el.clientHeight > 8,
+                );
+              }}
+            >
               <div
                 className={`conversation ${active ? "has-thread" : "is-empty"}`}
               >
                 {!active ? (
                   <section className="welcome">
                     <div className="hello">
-                      <Companion
-                        appearance={companion}
-                        dark={darkScheme}
-                        size="hero"
-                      />
                       <div className="hello-copy">
                         <h1>What should we get done on this page?</h1>
-                        <button
-                          className="hello-edit text-button"
-                          onClick={openCompanionEditor}
-                        >
-                          Customize companion
-                        </button>
+                        <p>Read the page, or just ask.</p>
                       </div>
                     </div>
                     <button
@@ -1414,35 +1736,38 @@ export default function App() {
                       </span>
                       <ChevronRight size={17} />
                     </button>
-                    {currentSource ? (
-                      <div
-                        className="suggestions"
-                        aria-label="Ways to use this page"
-                      >
-                        {(
+                    <div
+                      className="suggestions"
+                      aria-label="Ways to start"
+                    >
+                      {(
+                        [
                           [
-                            [
-                              "Help me understand this page.",
-                              "Read this page",
-                            ],
-                            [
-                              "Help me turn what caught my attention on this page into a practical next step.",
-                              "Plan next step",
-                            ],
-                          ] as const
-                        ).map(([prompt, label]) => (
-                          <button
-                            key={label}
-                            onClick={() => {
-                              setDraft(prompt);
-                              composer.current?.focus();
-                            }}
-                          >
-                            <span>{label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                            "Help me understand this page.",
+                            "Read this page",
+                          ],
+                          [
+                            "Help me turn what caught my attention on this page into a practical next step.",
+                            "Plan next step",
+                          ],
+                          [
+                            "Draft a short note about what I’m looking at.",
+                            "Draft a note",
+                          ],
+                        ] as const
+                      ).map(([prompt, label]) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            setDraft(prompt);
+                            composer.current?.focus();
+                          }}
+                        >
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </section>
                 ) : (
                   <section className="thread" aria-label="Pact conversation">
@@ -1654,7 +1979,35 @@ export default function App() {
                 <div ref={end} />
               </div>
             </div>
-            <footer className="composer-region">
+            <footer
+              className={`composer-region${scrolledComposer ? " frosted" : ""}`}
+            >
+              {toast && (
+                <div className="undo-toast" role="status" aria-live="polite">
+                  <span>{toast.message}</span>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      toast.undo();
+                      setToast(null);
+                    }}
+                  >
+                    Undo
+                  </button>
+                </div>
+              )}
+              {healthBanner && !error && (
+                <div className="health-banner" role="status">
+                  <span>{healthBanner}</span>
+                  <button
+                    className="text-button"
+                    onClick={() => void refreshHealth()}
+                  >
+                    Check again
+                  </button>
+                </div>
+              )}
               {error && (
                 <div className="error-banner" role="alert">
                   <span>{error}</span>
@@ -2530,6 +2883,22 @@ export default function App() {
             ) : null}
           </section>
         </div>
+      )}
+      {menu && menuPact && (
+        <PactMenu
+          pact={menuPact}
+          sections={sections}
+          className={menuExiting ? "exiting" : undefined}
+          style={{
+            position: "fixed",
+            left: Math.min(menu.x, window.innerWidth - 220),
+            top: Math.min(menu.y, window.innerHeight - 280),
+            zIndex: 80,
+            ["--origin" as string]: menu.origin,
+          }}
+          onClose={closeMenu}
+          onAction={(action) => void applyPactMenu(menuPact, action)}
+        />
       )}
     </div>
   );

@@ -319,10 +319,16 @@ app.post("/interpret/stream", async (req, res, next) => {
   let held: string | undefined;
   let closed = false;
   const abort = new AbortController();
-  req.on("close", () => {
-    closed = true;
-    abort.abort();
-  });
+  // Abort only when the client drops the response. Do NOT use req.on('close'):
+  // with express.json the request stream closes after the body is read, which
+  // would kill the SSE reply immediately and look like a silent submit failure.
+  const onClientGone = () => {
+    if (!res.writableEnded) {
+      closed = true;
+      abort.abort();
+    }
+  };
+  res.on("close", onClientGone);
   try {
     if (!canStream()) {
       res.status(501).json({
