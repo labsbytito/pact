@@ -173,15 +173,25 @@ export function parseModelReply(raw: string): unknown {
   return { reply: text };
 }
 
+export type ClaudeImage = {
+  mime: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  data: string;
+};
+
 // Opt-in local hackathon/testing adapter. Uses Claude Code's supported signed-in CLI;
 // no credential extraction, filesystem tools, MCP servers or action tools are available.
 export async function askClaude(
   system: string,
   content: string,
+  images: readonly ClaudeImage[] = [],
 ): Promise<string> {
   if (!aiReady()) throw new AiError("AI isn’t connected. Your Pact is saved.");
   const cap = await reserveBudget();
   if (provider() === "claude-code") {
+    const cliContent =
+      images.length === 0
+        ? content
+        : `${content}\n\n[${images.length} image attachment(s) were included by the user. The CLI path cannot render pixels; rely on attachment names and any text files in the JSON.]`;
     return new Promise((resolve, reject) => {
       const model = process.env.PACT_CLAUDE_MODEL;
       const child = spawn(
@@ -237,9 +247,23 @@ export async function askClaude(
           reject(e);
         }
       });
-      child.stdin.end(content);
+      child.stdin.end(cliContent);
     });
   }
+  const messageContent =
+    images.length === 0
+      ? content
+      : [
+          ...images.slice(0, 3).map((image) => ({
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: image.mime,
+              data: image.data,
+            },
+          })),
+          { type: "text" as const, text: content },
+        ];
   let response: Response;
   try {
     response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -253,7 +277,7 @@ export async function askClaude(
         model: process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL,
         max_tokens: 1800,
         system,
-        messages: [{ role: "user", content }],
+        messages: [{ role: "user", content: messageContent }],
       }),
       signal: AbortSignal.timeout(90000),
     });

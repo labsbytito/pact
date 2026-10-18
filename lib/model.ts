@@ -59,7 +59,13 @@ export type Pact = {
   actions?: Action[];
   archived?: boolean;
 };
-export type Settings = { onboarded: boolean };
+export type ThemePreference = "system" | "light" | "dark";
+export type Settings = {
+  onboarded: boolean;
+  theme?: ThemePreference;
+  /** Selected microphone device id, or "default". */
+  micDeviceId?: string;
+};
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
 export const message = (role: Message["role"], text: string): Message => ({

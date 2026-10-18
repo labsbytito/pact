@@ -21,8 +21,20 @@ import {
   AudioLines,
   ShieldCheck,
   MousePointer2,
+  FileText,
+  Image as ImageIcon,
+  User,
+  SlidersHorizontal,
+  Info,
+  Unplug,
 } from "lucide-react";
-import type { Action, Pact, Source, Settings } from "../../lib/model";
+import type {
+  Action,
+  Pact,
+  Source,
+  Settings,
+  ThemePreference,
+} from "../../lib/model";
 import {
   uid,
   now,
@@ -40,6 +52,11 @@ import {
 } from "../../lib/capture";
 import type { CaptureMode } from "../../lib/page-reader";
 import { api, interpret, ApiError, type Health } from "../../lib/api";
+import {
+  ATTACHMENT_LIMITS,
+  prepareAttachment,
+  type Attachment,
+} from "../../lib/attachments";
 import Companion from "./Companion";
 import {
   withCharacterSeeds,
@@ -52,6 +69,26 @@ import {
   companionSwatchName,
   type CompanionAppearance,
 } from "../../lib/character";
+
+type VoiceState = "idle" | "listening" | "transcribing" | "need-permission";
+type SettingsSection =
+  | "general"
+  | "companion"
+  | "fo"
+  | "privacy"
+  | "about";
+
+const ICON = 1.5;
+const APP_VERSION = "0.1.0";
+
+function effectiveDark(
+  theme: ThemePreference | undefined,
+  systemDark: boolean,
+) {
+  if (theme === "light") return false;
+  if (theme === "dark") return true;
+  return systemDark;
+}
 // Render links as React nodes: captured/returned text never becomes HTML.
 function LinkedText({ text }: { text: string }) {
   const nodes: ReactNode[] = [];
@@ -200,7 +237,12 @@ export default function App() {
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
     [archived, setArchived] = useState(false),
-    [listening, setListening] = useState(false),
+    [voice, setVoice] = useState<VoiceState>("idle"),
+    [attachments, setAttachments] = useState<Attachment[]>([]),
+    [settingsSection, setSettingsSection] =
+      useState<SettingsSection>("general"),
+    [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]),
+    [micGranted, setMicGranted] = useState(false),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [connecting, setConnecting] = useState(false),
@@ -208,12 +250,13 @@ export default function App() {
     [companion, setCompanion] = useState<CompanionAppearance>(DEFAULT_COMPANION),
     [draftCompanion, setDraftCompanion] =
       useState<CompanionAppearance>(DEFAULT_COMPANION),
-    [darkScheme, setDarkScheme] = useState(
+    [systemDark, setSystemDark] = useState(
       () =>
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-color-scheme: dark)").matches,
     );
   const dialog = useRef<HTMLElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const initialCaptureAllowed = useRef(true);
   const captureGeneration = useRef(0),
     handledSelection = useRef<string | undefined>(undefined);
@@ -225,6 +268,8 @@ export default function App() {
     pactsRef = useRef(pacts),
     speech = useRef<any>(null),
     writeQueue = useRef(Promise.resolve());
+  const listening = voice === "listening" || voice === "transcribing";
+  const darkScheme = effectiveDark(settings.theme, systemDark);
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
   const visible = pacts.filter(
@@ -234,14 +279,50 @@ export default function App() {
   );
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onScheme = () => setDarkScheme(media.matches);
+    const onScheme = () => setSystemDark(media.matches);
     media.addEventListener("change", onScheme);
     return () => media.removeEventListener("change", onScheme);
   }, []);
   useEffect(() => {
+    const theme = settings.theme ?? "system";
+    const root = document.documentElement;
+    if (theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+  }, [settings.theme]);
+  useEffect(() => {
     const accent = companionColorForScheme(companion.color, darkScheme);
     document.documentElement.style.setProperty("--companion", accent);
   }, [companion.color, darkScheme]);
+  useEffect(() => {
+    let cancelled = false;
+    async function syncMic() {
+      const {
+        queryMicPermission,
+        listMicrophones,
+      } = await import("../../lib/mic");
+      const state = await queryMicPermission();
+      if (cancelled) return;
+      setMicGranted(state === "granted");
+      if (state === "granted") {
+        const devices = await listMicrophones();
+        if (!cancelled) setMicDevices(devices);
+      }
+    }
+    void syncMic();
+    const onMessage = (message: { type?: string }) => {
+      if (message?.type === "pact-mic-granted") void syncMic();
+    };
+    if (typeof chrome !== "undefined" && chrome.runtime?.onMessage)
+      chrome.runtime.onMessage.addListener(onMessage);
+    const onFocus = () => void syncMic();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      if (typeof chrome !== "undefined" && chrome.runtime?.onMessage)
+        chrome.runtime.onMessage.removeListener(onMessage);
+    };
+  }, []);
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -426,10 +507,13 @@ export default function App() {
       ),
     );
   }
+  async function persistSettings(patch: Partial<Settings>) {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    await write("settings", next);
+  }
   async function onboard() {
-    const s = { onboarded: true };
-    setSettings(s);
-    await write("settings", s);
+    await persistSettings({ onboarded: true });
   }
   function newPact() {
     initialCaptureAllowed.current = false;
@@ -440,7 +524,10 @@ export default function App() {
     setView("chat");
     setSource(undefined);
     setDraft("");
+    setAttachments([]);
     setError("");
+    setVoice("idle");
+    speech.current?.abort?.();
     composer.current?.focus();
   }
   function openPact(p: Pact) {
@@ -497,13 +584,41 @@ export default function App() {
     : captureAge > 0
       ? `Read ${captureAge} min ago · saved snapshot`
       : "Read just now · saved snapshot";
+  async function addFiles(files: FileList | File[]) {
+    const incoming = Array.from(files);
+    if (!incoming.length) return;
+    setError("");
+    const room = ATTACHMENT_LIMITS.maxFiles - attachments.length;
+    if (room <= 0) {
+      setError(`You can attach up to ${ATTACHMENT_LIMITS.maxFiles} files.`);
+      return;
+    }
+    const next: Attachment[] = [...attachments];
+    for (const file of incoming.slice(0, room)) {
+      try {
+        next.push(await prepareAttachment(file));
+      } catch (e) {
+        setError(errorText(e));
+      }
+    }
+    setAttachments(next);
+  }
+  function removeAttachment(id: string) {
+    setAttachments((list) => list.filter((item) => item.id !== id));
+  }
   async function send() {
-    if (!draft.trim() || busy || capturing) return;
+    if ((!draft.trim() && !attachments.length) || busy || capturing) return;
     initialCaptureAllowed.current = false;
     setBusy(true);
     setError("");
-    const text = draft.trim();
+    const text =
+      draft.trim() ||
+      (attachments.length
+        ? `Look at the attached file${attachments.length > 1 ? "s" : ""}.`
+        : "");
+    const pending = attachments;
     setDraft("");
+    setAttachments([]);
     let p: Pact;
     try {
       if (active?.action?.status === "proposed" && active.action.planId) {
@@ -523,7 +638,7 @@ export default function App() {
       setView("chat");
       await onboard();
       try {
-        const result = await interpret(p);
+        const result = await interpret(p, pending);
         const latest = pactsRef.current.find((x) => x.id === p.id) ?? p;
         await update(mergeReply(latest, result, uid(), now()));
         await refreshHealth();
@@ -532,6 +647,7 @@ export default function App() {
       }
     } catch (e) {
       setDraft(text);
+      setAttachments(pending);
       setError(errorText(e));
     } finally {
       setBusy(false);
@@ -683,35 +799,106 @@ export default function App() {
       .map((p) => `${p.id}:${p.action?.status}:${p.action?.runId}`)
       .join("|"),
   ]);
-  function dictate() {
+  async function startRecognition() {
     const Speech =
       (window as any).SpeechRecognition ??
       (window as any).webkitSpeechRecognition;
     if (!Speech) {
+      setVoice("idle");
       setError(
         "Dictation isn’t available in this browser. You can always type your message.",
       );
       return;
     }
-    if (listening) {
-      speech.current?.stop();
+    try {
+      const { probeMicrophone } = await import("../../lib/mic");
+      await probeMicrophone(settings.micDeviceId);
+    } catch {
+      setVoice("need-permission");
+      setError(
+        "Microphone isn’t available yet. Allow it once, then try dictation again.",
+      );
       return;
     }
     const recognition = new Speech();
     recognition.lang = navigator.language;
-    recognition.interimResults = false;
-    recognition.onresult = (e: any) =>
-      setDraft((d) => `${d}${d ? " " : ""}${e.results[0][0].transcript}`);
-    recognition.onerror = () => {
-      setError(
-        "Dictation couldn’t start. Check microphone access, or type your message.",
-      );
-      setListening(false);
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onstart = () => setVoice("listening");
+    recognition.onresult = (e: any) => {
+      let finalText = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const piece = e.results[i][0]?.transcript ?? "";
+        if (e.results[i].isFinal) finalText += piece;
+        else interim += piece;
+      }
+      if (finalText) {
+        setVoice("transcribing");
+        setDraft((d) => `${d}${d ? " " : ""}${finalText.trim()}`);
+      } else if (interim) setVoice("listening");
     };
-    recognition.onend = () => setListening(false);
+    recognition.onerror = (e: any) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setVoice("need-permission");
+        setError(
+          "Microphone is blocked for Pact. Open mic settings to allow it.",
+        );
+      } else if (e.error !== "aborted" && e.error !== "no-speech") {
+        setError("Dictation couldn’t finish. Try again, or type your message.");
+        setVoice("idle");
+      } else setVoice("idle");
+    };
+    recognition.onend = () => setVoice((v) => (v === "need-permission" ? v : "idle"));
     speech.current = recognition;
-    recognition.start();
-    setListening(true);
+    try {
+      recognition.start();
+      setVoice("listening");
+    } catch {
+      setVoice("idle");
+      setError("Dictation couldn’t start. Try again in a moment.");
+    }
+  }
+  async function dictate() {
+    if (listening) {
+      speech.current?.stop?.();
+      setVoice("idle");
+      return;
+    }
+    setError("");
+    const { queryMicPermission, openMicPermissionPage } = await import(
+      "../../lib/mic"
+    );
+    const permission = await queryMicPermission();
+    if (permission === "denied") {
+      setVoice("need-permission");
+      setError(
+        "Microphone is blocked. Open mic settings, allow Pact, then try again.",
+      );
+      return;
+    }
+    if (permission !== "granted") {
+      setVoice("need-permission");
+      try {
+        await openMicPermissionPage();
+      } catch (e) {
+        setError(errorText(e));
+      }
+      return;
+    }
+    setMicGranted(true);
+    await startRecognition();
+  }
+  async function openMicHelp() {
+    const { queryMicPermission, openMicPermissionPage, openMicSiteSettings } =
+      await import("../../lib/mic");
+    const permission = await queryMicPermission();
+    try {
+      if (permission === "denied") await openMicSiteSettings();
+      else await openMicPermissionPage();
+    } catch (e) {
+      setError(errorText(e));
+    }
   }
   function sourceLink(s: Source, time?: number) {
     const url = safeUrl(s.url);
@@ -1025,7 +1212,6 @@ export default function App() {
                       />
                       <div className="hello-copy">
                         <h1>What should we get done on this page?</h1>
-                        <p>Bring me a page, or just a thought.</p>
                         <button
                           className="hello-edit text-button"
                           onClick={openCompanionEditor}
@@ -1094,11 +1280,7 @@ export default function App() {
                           </button>
                         ))}
                       </div>
-                    ) : (
-                      <p className="welcome-hint">
-                        Or start a conversation below.
-                      </p>
-                    )}
+                    ) : null}
                   </section>
                 ) : (
                   <section className="thread" aria-label="Pact conversation">
@@ -1330,7 +1512,7 @@ export default function App() {
               {currentSource && (
                 <div className={`attached-source ${pageStale ? "stale" : ""}`}>
                   <button onClick={() => setSourceOpen(true)}>
-                    <Link2 size={14} />
+                    <Link2 size={14} strokeWidth={ICON} />
                     <span>
                       {currentSource.title}
                       <small>
@@ -1354,20 +1536,83 @@ export default function App() {
                       else setSource(undefined);
                     }}
                   >
-                    <X size={14} />
+                    <X size={14} strokeWidth={ICON} />
                   </button>
                 </div>
               )}
-              <div className={`composer ${listening ? "listening" : ""}`}>
+              {(attachments.length > 0 || voice !== "idle") && (
+                <div className="composer-meta" aria-live="polite">
+                  {voice === "listening" && (
+                    <span className="voice-chip listening">Listening…</span>
+                  )}
+                  {voice === "transcribing" && (
+                    <span className="voice-chip">Transcribing…</span>
+                  )}
+                  {voice === "need-permission" && (
+                    <button
+                      type="button"
+                      className="voice-chip action"
+                      onClick={() => void openMicHelp()}
+                    >
+                      Open mic settings
+                    </button>
+                  )}
+                  {attachments.map((item) => (
+                    <span key={item.id} className="attach-chip">
+                      {item.kind === "image" && item.previewUrl ? (
+                        <img src={item.previewUrl} alt="" />
+                      ) : item.kind === "image" ? (
+                        <ImageIcon size={14} strokeWidth={ICON} />
+                      ) : (
+                        <FileText size={14} strokeWidth={ICON} />
+                      )}
+                      <span title={item.name}>{item.name}</span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Remove ${item.name}`}
+                        onClick={() => removeAttachment(item.id)}
+                      >
+                        <X size={12} strokeWidth={ICON} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInput}
+                type="file"
+                className="sr-only"
+                accept={ATTACHMENT_LIMITS.accept}
+                multiple
+                onChange={(e) => {
+                  if (e.target.files) void addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <div
+                className={`composer ${listening ? "listening" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length)
+                    void addFiles(e.dataTransfer.files);
+                }}
+              >
                 <textarea
                   ref={composer}
                   aria-label="Message Pact"
                   placeholder={
-                    listening
+                    voice === "listening"
                       ? "Listening…"
-                      : active?.action?.status === "needs_answer"
-                        ? "Reply to Fo…"
-                        : "What do you want to get done?"
+                      : voice === "transcribing"
+                        ? "Transcribing…"
+                        : active?.action?.status === "needs_answer"
+                          ? "Reply to Fo…"
+                          : "What do you want to get done?"
                   }
                   value={draft}
                   maxLength={8000}
@@ -1387,20 +1632,15 @@ export default function App() {
                 <div className="composer-actions">
                   <button
                     className="icon-button"
-                    title="Add current page"
-                    aria-label="Add current page"
-                    onClick={() => void capture("page")}
-                    disabled={capturing}
+                    title="Attach file"
+                    aria-label="Attach file"
+                    onClick={() => fileInput.current?.click()}
+                    disabled={
+                      busy || attachments.length >= ATTACHMENT_LIMITS.maxFiles
+                    }
                   >
-                    {capturing ? (
-                      <Loader2 size={19} className="spin" />
-                    ) : (
-                      <Paperclip size={19} />
-                    )}
+                    <Paperclip size={19} strokeWidth={ICON} />
                   </button>
-                  <span>
-                    {currentSource ? "Page attached" : "Attach current page"}
-                  </span>
                   <button
                     className={`icon-button mic-button ${listening ? "active" : ""}`}
                     title={listening ? "Stop dictation" : "Dictate a message"}
@@ -1408,27 +1648,30 @@ export default function App() {
                       listening ? "Stop dictation" : "Dictate a message"
                     }
                     aria-pressed={listening}
-                    onClick={dictate}
+                    onClick={() => void dictate()}
                   >
-                    {listening ? <AudioLines size={20} /> : <Mic size={19} />}
+                    {listening ? (
+                      <AudioLines size={20} strokeWidth={ICON} />
+                    ) : (
+                      <Mic size={19} strokeWidth={ICON} />
+                    )}
                   </button>
                   <button
                     className="send-button"
-                    disabled={!draft.trim() || busy || capturing}
-                    onClick={send}
+                    disabled={
+                      (!draft.trim() && !attachments.length) || busy || capturing
+                    }
+                    onClick={() => void send()}
                     aria-label="Send message"
                   >
                     {busy ? (
-                      <Loader2 size={18} className="spin" />
+                      <Loader2 size={18} className="spin" strokeWidth={ICON} />
                     ) : (
-                      <ArrowUp size={20} />
+                      <ArrowUp size={20} strokeWidth={ICON} />
                     )}
                   </button>
                 </div>
               </div>
-              <p className="composer-note">
-                You choose what’s shared. You approve every action.
-              </p>
             </footer>
           </>
         )}
@@ -1437,12 +1680,12 @@ export default function App() {
         <div className="modal-backdrop" onClick={closeDialog}>
           <section
             ref={dialog}
-            className="dialog"
+            className={`dialog${settingsOpen ? " settings-dialog" : ""}`}
             onKeyDown={(e) => {
               if (e.key !== "Tab") return;
               const items = Array.from(
                 dialog.current?.querySelectorAll<HTMLElement>(
-                  "button:not([disabled]),a[href],input,summary,input[type=color]",
+                  "button:not([disabled]),a[href],input,select,summary,input[type=color]",
                 ) ?? [],
               );
               const first = items[0],
@@ -1591,179 +1834,282 @@ export default function App() {
                   >
                     Cancel
                   </button>
-                  <button className="primary" onClick={() => void saveCompanion()}>
+                  <button
+                    className="primary"
+                    onClick={() => void saveCompanion()}
+                  >
                     Done
                   </button>
                 </div>
               </>
             ) : settingsOpen ? (
-              <>
-                <div className="settings-section">
-                  <h3>Companion</h3>
-                  <div className="connection-row">
-                    <Companion
-                      appearance={companion}
-                      dark={darkScheme}
-                      size="small"
-                    />
-                    <span>
-                      <strong>{companionSwatchName(companion.color)}</strong>
-                      <small>
-                        {
-                          SHAPE_OPTIONS.find(
-                            (option) => option.shape === companion.shape,
-                          )?.name
-                        }{" "}
-                        · accent for links
-                      </small>
-                    </span>
-                  </div>
-                  <button
-                    className="secondary full"
-                    onClick={openCompanionEditor}
-                  >
-                    Customize companion
-                  </button>
-                </div>
-                <div className="settings-section">
-                  <h3>Connections</h3>
-                  <div className="connection-row">
-                    <span className="service-mark">
-                      fo<span>↗</span>
-                    </span>
-                    <span>
-                      <strong>Fo by Wajo</strong>
-                      <small>
-                        {health.fo
-                          ? "Connected to your Wajo account"
-                          : "Real-world actions through your account"}
-                      </small>
-                    </span>
-                    <span
-                      className={`status-light ${health.fo ? "" : "offline"}`}
-                    />
-                  </div>
-                  <p className="setting-description">
-                    Fo can carry out supported tasks through your connected
-                    services. You’ll review each proposed action first.
-                  </p>
-                  {authUrl && !health.fo && (
-                    <a
-                      className="primary full"
-                      href={authUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Continue to Wajo
-                      <ArrowUpRight size={18} />
-                    </a>
-                  )}
-                  {health.fo ? (
+              <div className="settings-shell">
+                <nav className="settings-nav" aria-label="Settings">
+                  {(
+                    [
+                      ["general", "General", SlidersHorizontal],
+                      ["companion", "Companion", User],
+                      ["fo", "Fo", Unplug],
+                      ["privacy", "Privacy", ShieldCheck],
+                      ["about", "About", Info],
+                    ] as const
+                  ).map(([id, label, Icon]) => (
                     <button
-                      className="secondary full"
-                      onClick={async () => {
-                        try {
-                          await api("/fo/disconnect", {});
-                          await refreshHealth();
-                        } catch (e) {
-                          setError(errorText(e));
-                        }
-                      }}
+                      key={id}
+                      type="button"
+                      className={settingsSection === id ? "chosen" : ""}
+                      onClick={() => setSettingsSection(id)}
                     >
-                      Disconnect Fo
+                      <Icon size={16} strokeWidth={ICON} />
+                      {label}
                     </button>
-                  ) : (
-                    <button
-                      className="primary full"
-                      disabled={connecting}
-                      onClick={connectFo}
-                    >
-                      {connecting ? (
-                        <Loader2 className="spin" size={17} />
-                      ) : null}
-                      Connect Fo
-                      <ArrowUpRight size={18} />
-                    </button>
-                  )}
-                  {!settings.onboarded && (
-                    <button
-                      className="text-button later"
-                      onClick={() => {
-                        void onboard();
-                        closeDialog();
-                      }}
-                    >
-                      I’ll do this later
-                    </button>
-                  )}
-                </div>
-                <div className="settings-section">
-                  <div className="setting-line">
-                    <h3>Intelligence</h3>
-                    <span
-                      className={`state-tag ${health.ai ? "connected" : ""}`}
-                    >
-                      {health.aiStatus?.budget.exhausted
-                        ? "Paused · local limit"
-                        : health.ai
-                          ? "Available"
-                          : "Not connected"}
-                    </span>
-                  </div>
-                  <p className="setting-description">
-                    {health.ai
-                      ? "Claude helps make sense of your intention and the context you choose to share."
-                      : "Connect Claude through the local companion. You can create and save Pacts while AI is offline."}
-                  </p>
-                  {health.aiStatus?.model && (
-                    <div className="setting-line">
-                      <span>Model</span>
-                      <span>
-                        {health.aiStatus.model === "claude-code-default"
-                          ? "Claude account default"
-                          : health.aiStatus.model}
-                      </span>
-                    </div>
-                  )}
-                  {health.aiStatus && health.aiStatus.provider !== "none" && (
+                  ))}
+                </nav>
+                <div className="settings-pane">
+                  {settingsSection === "general" && (
                     <>
-                      <div className="setting-line">
-                        <span>Connection</span>
-                        <span>
-                          {health.aiStatus.provider === "claude-code"
-                            ? "Claude Code"
-                            : "Anthropic API"}
-                        </span>
+                      <p className="settings-group-label">Appearance</p>
+                      <div className="settings-card">
+                        <label className="settings-row">
+                          <span>Theme</span>
+                          <select
+                            aria-label="Theme"
+                            value={settings.theme ?? "system"}
+                            onChange={(e) =>
+                              void persistSettings({
+                                theme: e.target.value as ThemePreference,
+                              })
+                            }
+                          >
+                            <option value="system">System</option>
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                          </select>
+                        </label>
                       </div>
-                      <div className="setting-line">
-                        <span>Local AI allowance</span>
-                        <span>
-                          ${health.aiStatus.budget.remainingUsd.toFixed(2)} / $
-                          {health.aiStatus.budget.capUsd.toFixed(2)} left
-                        </span>
+                      <p className="settings-group-label">System</p>
+                      <div className="settings-card">
+                        <label className="settings-row">
+                          <span>Microphone</span>
+                          <select
+                            aria-label="Microphone"
+                            value={settings.micDeviceId ?? "default"}
+                            onChange={(e) =>
+                              void persistSettings({
+                                micDeviceId: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="default">System Default</option>
+                            {micDevices.map((device) => (
+                              <option
+                                key={device.deviceId}
+                                value={device.deviceId}
+                              >
+                                {device.label || "Microphone"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="settings-row">
+                          <span>Mic access</span>
+                          <button
+                            type="button"
+                            className="settings-chip"
+                            onClick={() => void openMicHelp()}
+                          >
+                            {micGranted ? "Manage" : "Allow"}
+                          </button>
+                        </div>
                       </div>
-                      <p className="setting-description">
-                        ${health.aiStatus.budget.spentUsd.toFixed(2)} reserved ·
-                        up to ${health.aiStatus.budget.perRequestUsd.toFixed(2)}{" "}
-                        per reply. This local limit is separate from your Claude
-                        account balance.
-                      </p>
+                      <p className="settings-group-label">Intelligence</p>
+                      <div className="settings-card">
+                        <div className="settings-row">
+                          <span>Claude</span>
+                          <span className="settings-value">
+                            {health.aiStatus?.budget.exhausted
+                              ? "Paused"
+                              : health.ai
+                                ? "Available"
+                                : "Offline"}
+                          </span>
+                        </div>
+                        <div className="settings-row">
+                          <span>Local companion</span>
+                          <span className="settings-value">
+                            {companionOnline ? "Running" : "Offline"}
+                          </span>
+                        </div>
+                        {health.aiStatus?.model && (
+                          <div className="settings-row">
+                            <span>Model</span>
+                            <span className="settings-value">
+                              {health.aiStatus.model === "claude-code-default"
+                                ? "Account default"
+                                : health.aiStatus.model}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
-                  <div className="setting-line">
-                    <span>Local companion</span>
-                    <span>{companionOnline ? "Running" : "Offline"}</span>
-                  </div>
+                  {settingsSection === "companion" && (
+                    <>
+                      <p className="settings-group-label">Account</p>
+                      <div className="settings-card account-card">
+                        <div className="account-row">
+                          <Companion
+                            appearance={companion}
+                            dark={darkScheme}
+                            size="small"
+                          />
+                          <span>
+                            <strong>Your companion</strong>
+                            <small>
+                              {
+                                SHAPE_OPTIONS.find(
+                                  (option) =>
+                                    option.shape === companion.shape,
+                                )?.name
+                              }{" "}
+                              · {companionSwatchName(companion.color)}
+                            </small>
+                          </span>
+                          <button
+                            type="button"
+                            className="settings-chip"
+                            onClick={openCompanionEditor}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {settingsSection === "fo" && (
+                    <>
+                      <p className="settings-group-label">Connection</p>
+                      <div className="settings-card">
+                        <div className="account-row">
+                          <span className="service-mark">
+                            fo<span>↗</span>
+                          </span>
+                          <span>
+                            <strong>Fo by Wajo</strong>
+                            <small>
+                              {health.fo ? "Connected" : "Not connected"}
+                            </small>
+                          </span>
+                          <span
+                            className={`status-light ${health.fo ? "" : "offline"}`}
+                          />
+                        </div>
+                        {authUrl && !health.fo && (
+                          <a
+                            className="primary full"
+                            href={authUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Continue to Wajo
+                            <ArrowUpRight size={16} strokeWidth={ICON} />
+                          </a>
+                        )}
+                        {health.fo ? (
+                          <div className="settings-actions">
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => void connectFo()}
+                              disabled={connecting}
+                            >
+                              Reconnect
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={async () => {
+                                try {
+                                  await api("/fo/disconnect", {});
+                                  setAuthUrl(undefined);
+                                  await refreshHealth();
+                                } catch (e) {
+                                  setError(errorText(e));
+                                }
+                              }}
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="primary full"
+                            disabled={connecting}
+                            onClick={() => void connectFo()}
+                          >
+                            {connecting ? (
+                              <Loader2
+                                className="spin"
+                                size={16}
+                                strokeWidth={ICON}
+                              />
+                            ) : null}
+                            Connect
+                            <ArrowUpRight size={16} strokeWidth={ICON} />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {settingsSection === "privacy" && (
+                    <>
+                      <p className="settings-group-label">What’s shared</p>
+                      <div className="settings-card">
+                        <div className="settings-row stacked">
+                          <span>Pacts</span>
+                          <span className="settings-value">
+                            Stay in this browser on your device
+                          </span>
+                        </div>
+                        <div className="settings-row stacked">
+                          <span>Page context</span>
+                          <span className="settings-value">
+                            Read when you ask; sent with your message
+                          </span>
+                        </div>
+                        <div className="settings-row stacked">
+                          <span>Attachments</span>
+                          <span className="settings-value">
+                            Images and text files you attach to a message
+                          </span>
+                        </div>
+                        <div className="settings-row stacked">
+                          <span>Fo</span>
+                          <span className="settings-value">
+                            Only the action you approve
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {settingsSection === "about" && (
+                    <>
+                      <p className="settings-group-label">Pact</p>
+                      <div className="settings-card">
+                        <div className="settings-row">
+                          <span>Version</span>
+                          <span className="settings-value">{APP_VERSION}</span>
+                        </div>
+                        <div className="settings-row">
+                          <span>Build</span>
+                          <span className="settings-value">Hackathon</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="privacy-footnote">
-                  <ShieldCheck size={18} />
-                  <p>
-                    Your Pacts stay in this browser. Page context is read when
-                    you ask, and shared with Claude when you send a message. Fo
-                    receives only the action you approve.
-                  </p>
-                </div>
-              </>
+              </div>
             ) : sourceOpen && currentSource ? (
               <>
                 <div className="source-detail">

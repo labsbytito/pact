@@ -1,4 +1,5 @@
 import { interpretationContext } from "./context";
+import type { Attachment } from "./attachments";
 import type { Pact } from "./model";
 export class ApiError extends Error {
   constructor(
@@ -65,5 +66,7 @@ export type Interpretation = {
     expiresAt?: string;
   };
 };
-export const interpret = (pact: Pact) =>
-  api<Interpretation>("/interpret", interpretationContext(pact));
+export const interpret = (
+  pact: Pact,
+  attachments: readonly Attachment[] = [],
+) => api<Interpretation>("/interpret", interpretationContext(pact, attachments));
