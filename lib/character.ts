@@ -1,11 +1,24 @@
 /** Deterministic Pact companions from a seed. No deps, no I/O. */
 
 export type CharacterSize = "tiny" | "small" | "normal" | "hero";
+
+/**
+ * Companion life cycle. Prefer BlobState from PactBlob for new UI.
+ * Legacy aliases (working/streaming/done/attention) still resolve.
+ */
 export type CharacterState =
   | "idle"
+  | "greeting"
+  | "listening"
   | "thinking"
-  | "working"
+  | "speaking"
+  | "streaming"
   | "happy"
+  | "error"
+  | "still"
+  | "sleepy"
+  | "done"
+  | "working"
   | "attention";
 
 export type EyeKind = "pill" | "dot";
