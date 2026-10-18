@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+if ! command -v node >/dev/null 2>&1; then
+  pact_runtime="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin"
+  if [ -x "$pact_runtime/node" ]; then PATH="$pact_runtime:$PATH"; export PATH; fi
+fi
+case "${1:-}" in
+  build) exec node node_modules/wxt/bin/wxt.mjs build ;;
+  check) exec node node_modules/typescript/bin/tsc --noEmit ;;
+  test) exec node node_modules/tsx/dist/cli.mjs --test tests/*.test.ts ;;
+  server) exec node node_modules/tsx/dist/cli.mjs server/index.ts ;;
+  dev) exec node node_modules/wxt/bin/wxt.mjs --port 5173 ;;
+  *) echo 'Usage: ./scripts/pact build|check|test|server|dev'; exit 1 ;;
+esac

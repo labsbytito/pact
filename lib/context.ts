@@ -1,0 +1,122 @@
+import type { Pact, Source, Action } from "./model";
+// Keep the complete local history; only send the context needed for this reply.
+export function interpretationContext(pact: Pact) {
+  let source: Source | undefined;
+  if (pact.source) {
+    const s = pact.source;
+    const nearby = s.transcript.filter(
+      (x) => Math.abs(x.start - (s.videoTime ?? 0)) <= 120,
+    );
+    const broad = s.transcript.filter(
+      (_, i) => i % Math.max(1, Math.ceil(s.transcript.length / 45)) === 0,
+    );
+    const candidates = [...nearby, ...broad];
+    const unique = new Map<number, { start: number; text: string }>();
+    let remaining = 40000;
+    for (const line of candidates) {
+      if (unique.has(line.start)) continue;
+      const text = line.text.slice(0, 1000);
+      if (text.length > remaining) break;
+      unique.set(line.start, { start: line.start, text });
+      remaining -= text.length;
+    }
+    source = {
+      ...s,
+      title: s.title.slice(0, 1000),
+      description: s.description.slice(0, 4000),
+      text: s.text.slice(0, 12000),
+      selection: s.selection.slice(0, 4000),
+      transcript: [...unique.values()].sort((a, b) => a.start - b.start),
+      transcriptPartial: unique.size < s.transcript.length,
+    };
+  }
+  const payload = {
+    pact: {
+      id: pact.id,
+      intention: pact.intention.slice(0, 8000),
+      source,
+      messages: pact.messages
+        .slice(-24)
+        .map((m) => ({ role: m.role, text: m.text.slice(0, 8000) })),
+    },
+  };
+  const bytes = () => new TextEncoder().encode(JSON.stringify(payload)).length;
+  while (bytes() > 240000 && payload.pact.messages.length > 1)
+    payload.pact.messages.shift();
+  if (bytes() > 240000 && source) source.text = source.text.slice(0, 4000);
+  while (bytes() > 240000 && source && source.transcript.length) {
+    const farthest = source.transcript.reduce(
+      (best, line, i, all) =>
+        Math.abs(line.start - (source!.videoTime ?? 0)) >
+        Math.abs(all[best]!.start - (source!.videoTime ?? 0))
+          ? i
+          : best,
+      0,
+    );
+    source.transcript.splice(farthest, 1);
+    source.transcriptPartial = true;
+  }
+  return payload;
+}
+export function unresolved(action?: Action) {
+  return !!action && ["approved", "running", "unknown"].includes(action.status);
+}
+export function supersedeProposal(pact: Pact): Pact {
+  if (pact.action?.status !== "proposed") return pact;
+  return {
+    ...pact,
+    action: undefined,
+    actions: [
+      ...(pact.actions ?? []),
+      { ...pact.action, status: "superseded" },
+    ],
+  };
+}
+export function mergeReply(
+  pact: Pact,
+  result: {
+    reply: string;
+    title?: string;
+    action?: {
+      title: string;
+      instruction: string;
+      planId: string;
+      toolName: string;
+      arguments: Record<string, unknown>;
+      expiresAt?: string;
+    };
+  },
+  id: string,
+  at: string,
+): Pact {
+  let next = {
+    ...pact,
+    title: result.title ?? pact.title,
+    messages: [
+      ...pact.messages,
+      { id, at, role: "assistant" as const, text: result.reply },
+    ],
+  };
+  if (unresolved(pact.action)) return next;
+  if (pact.action)
+    next = {
+      ...next,
+      action: undefined,
+      actions: [
+        ...(pact.actions ?? []),
+        {
+          ...pact.action,
+          status:
+            pact.action.status === "proposed"
+              ? "superseded"
+              : pact.action.status,
+        },
+      ],
+    };
+  if (result.action)
+    next = {
+      ...next,
+      action: { id: crypto.randomUUID(), ...result.action, status: "proposed" },
+    };
+  return next;
+}

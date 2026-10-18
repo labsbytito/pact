@@ -1,0 +1,33 @@
+{
+  "name": "pact",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt --port 5173",
+    "build": "wxt build",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "server": "tsx server/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "@wxt-dev/module-react": "latest",
+    "express": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "wxt": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.5",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "prettier": "^3.9.10",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}

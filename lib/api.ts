@@ -1,0 +1,53 @@
+import { interpretationContext } from "./context";
+import type { Pact } from "./model";
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+const base = "http://127.0.0.1:4317";
+export async function api<T>(path: string, body?: unknown): Promise<T> {
+  try {
+    const res = await fetch(base + path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(path === "/interpret" ? 95000 : 15000),
+    });
+    const data = await res.json();
+    if (!res.ok)
+      throw new ApiError(
+        data.error ?? "The companion service could not complete this request.",
+        res.status,
+      );
+    return data;
+  } catch (e) {
+    if (e instanceof TypeError)
+      throw new Error(
+        "The local companion is offline. Your Pact is saved. Start the companion service to use AI and Fo.",
+      );
+    throw e;
+  }
+}
+export type Health = {
+  ai: boolean;
+  fo: boolean;
+  tools: { name: string; description?: string }[];
+};
+export type Interpretation = {
+  reply: string;
+  title?: string;
+  action?: {
+    title: string;
+    instruction: string;
+    planId: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+    expiresAt?: string;
+  };
+};
+export const interpret = (pact: Pact) =>
+  api<Interpretation>("/interpret", interpretationContext(pact));

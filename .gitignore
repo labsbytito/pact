@@ -1,0 +1,10 @@
+node_modules/
+.output/
+.wxt/
+.env
+.env.*
+!.env.example
+.local/
+*.log
+.DS_Store
+.impeccable/
