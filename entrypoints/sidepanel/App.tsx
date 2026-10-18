@@ -42,6 +42,7 @@ import {
   MoreHorizontal,
   Pin,
   FolderInput,
+  Trash2,
 } from "lucide-react";
 import type {
   Action,
@@ -314,6 +315,11 @@ export default function App() {
       x: number;
       y: number;
       origin: string;
+    } | null>(null),
+    [sectionMenu, setSectionMenu] = useState<{
+      sectionId: string;
+      x: number;
+      y: number;
     } | null>(null),
     [toast, setToast] = useState<{
       id: number;
@@ -1375,6 +1381,10 @@ export default function App() {
           closeMenu();
           return;
         }
+        if (sectionMenu) {
+          setSectionMenu(null);
+          return;
+        }
         if (attachMenu) {
           setAttachMenu(false);
           return;
@@ -1384,6 +1394,7 @@ export default function App() {
     }
     function dismissMenu() {
       closeMenu();
+      setSectionMenu(null);
     }
     window.addEventListener("keydown", key);
     window.addEventListener("click", dismissMenu);
@@ -1391,7 +1402,7 @@ export default function App() {
       window.removeEventListener("keydown", key);
       window.removeEventListener("click", dismissMenu);
     };
-  }, [busy, attachMenu, menu, menuExiting, renamingId, selected]);
+  }, [busy, attachMenu, menu, menuExiting, renamingId, selected, sectionMenu]);
   if (!uiReady)
     return (
       <div className={`boot${showSkeleton ? "" : " boot-quiet"}`} aria-busy="true">
@@ -1479,7 +1490,7 @@ export default function App() {
                         <span className="recent-avatar">
                           <Companion
                             seed={p.characterSeed ?? p.id}
-                            size="tiny"
+                            size={32}
                             lively={false}
                           />
                         </span>
@@ -1664,27 +1675,28 @@ export default function App() {
                       sections.some((s) => s.id === group.id) && (
                         <button
                           type="button"
-                          className="text-button"
-                          onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Delete section “${group.name}”? Pacts stay in the list.`,
-                              )
-                            )
-                              return;
-                            await saveSections(
-                              sections.filter((s) => s.id !== group.id),
-                            );
-                            await save(
-                              pactsRef.current.map((p) =>
-                                p.sectionId === group.id
-                                  ? { ...p, sectionId: null }
-                                  : p,
-                              ),
-                            );
+                          className="icon-button section-more"
+                          data-open={
+                            sectionMenu?.sectionId === group.id
+                              ? "true"
+                              : undefined
+                          }
+                          aria-label={`Section actions for ${group.name}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rect = (
+                              e.currentTarget as HTMLElement
+                            ).getBoundingClientRect();
+                            setMenu(null);
+                            setSectionMenu({
+                              sectionId: group.id!,
+                              x: Math.min(rect.left, window.innerWidth - 200),
+                              y: rect.bottom + 4,
+                            });
                           }}
                         >
-                          Delete section
+                          <MoreHorizontal size={16} strokeWidth={ICON} />
                         </button>
                       )}
                   </div>
@@ -1724,7 +1736,7 @@ export default function App() {
                             <span className="recent-avatar">
                               <Companion
                                 seed={p.characterSeed ?? p.id}
-                                size="tiny"
+                                size={32}
                                 lively={false}
                               />
                             </span>
@@ -1898,10 +1910,6 @@ export default function App() {
                     >
                       {(
                         [
-                          [
-                            "Help me understand this page.",
-                            "Read this page",
-                          ],
                           [
                             "Help me turn what caught my attention on this page into a practical next step.",
                             "Plan next step",
@@ -3052,6 +3060,69 @@ export default function App() {
           </section>
         </div>
       )}
+      {sectionMenu &&
+        (() => {
+          const section = sections.find((s) => s.id === sectionMenu.sectionId);
+          if (!section) return null;
+          return (
+            <div
+              className="section-menu"
+              style={{ left: sectionMenu.x, top: sectionMenu.y }}
+              role="menu"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="menu-item"
+                role="menuitem"
+                onClick={() => {
+                  const name = window.prompt("Rename section", section.name);
+                  setSectionMenu(null);
+                  if (!name?.trim() || name.trim() === section.name) return;
+                  void saveSections(
+                    sections.map((s) =>
+                      s.id === section.id
+                        ? { ...s, name: name.trim().slice(0, 60) }
+                        : s,
+                    ),
+                  );
+                }}
+              >
+                <Pencil size={14} strokeWidth={ICON} />
+                <span>Rename section</span>
+              </button>
+              <button
+                type="button"
+                className="menu-item danger"
+                role="menuitem"
+                onClick={() => {
+                  setSectionMenu(null);
+                  if (
+                    !window.confirm(
+                      `Delete section “${section.name}”? Pacts stay in the list.`,
+                    )
+                  )
+                    return;
+                  void (async () => {
+                    await saveSections(
+                      sections.filter((s) => s.id !== section.id),
+                    );
+                    await save(
+                      pactsRef.current.map((p) =>
+                        p.sectionId === section.id
+                          ? { ...p, sectionId: null }
+                          : p,
+                      ),
+                    );
+                  })();
+                }}
+              >
+                <Trash2 size={14} strokeWidth={ICON} />
+                <span>Delete section</span>
+              </button>
+            </div>
+          );
+        })()}
       {menu && menuPact && (
         <PactMenu
           pact={menuPact}

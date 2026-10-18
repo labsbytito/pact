@@ -882,8 +882,26 @@ a {
   margin: 14px 2px 0;
 }
 .suggestions {
-  margin-top: 8px;
-  display: grid;
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.welcome .suggestions button {
+  width: auto;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  background: var(--fill-hover);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.3;
+  transition: background-color var(--d-hover) var(--ease);
+}
+.welcome .suggestions button:hover {
+  background: var(--fill-selected);
 }
 .suggestions button,
 .choice-option {
@@ -1292,14 +1310,19 @@ a {
 }
 .recent-avatar {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
 }
 .recent-avatar .pact-blob {
-  width: 28px !important;
-  height: 28px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+.recent-avatar .pact-blob svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 .recent-copy {
   flex: 1;
@@ -1401,11 +1424,40 @@ a {
   margin-bottom: 6px;
 }
 .library-group-head {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin: 14px 2px 6px;
+}
+.library-group-head .section-more {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-xs);
+  color: var(--text-2);
+  transition: opacity var(--d-hover) var(--ease), background-color
+    var(--d-hover) var(--ease);
+}
+.library-group-head:hover .section-more,
+.library-group-head:focus-within .section-more,
+.section-more[data-open="true"] {
+  opacity: 1;
+}
+.section-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--glass-shadow);
+  display: grid;
+  gap: 1px;
 }
 .library-group-head h2,
 .recent-label {
