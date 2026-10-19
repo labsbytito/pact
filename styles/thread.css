@@ -432,3 +432,18 @@ html[data-motion="reduced"] .live-dot { animation: none; }
 .list-preview { font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .section-label { font-size: 12px; font-weight: 500; color: var(--text-2); margin: 12px 8px 4px; }
 .note { color: var(--danger); font-size: 12px; margin: 4px 0 0; }
+.reach-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.reach-banner p { margin: 0; flex: 1; min-width: 0; color: var(--text-1); }
+.reach-banner strong { font-weight: 600; }
+.reach-banner .text-btn { flex: none; }

@@ -77,6 +77,16 @@ export function combineAbortSignals(
   return controller.signal;
 }
 
+export function friendlyStreamError(raw: unknown) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (
+    !text ||
+    /not valid JSON|object Object|SyntaxError|Unexpected token|journal could not/i.test(text)
+  )
+    return "Pact couldn't finish that reply.";
+  return text;
+}
+
 function offlineError() {
   const dev =
     (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
@@ -273,10 +283,7 @@ async function readStream(
           );
         } else if (e.type === "error") {
           if (e.partial) partial = e.partial;
-          throw new ApiError(
-            e.error ?? "Claude could not return a reply.",
-            502,
-          );
+          throw new ApiError(friendlyStreamError(e.error), 502);
         } else if (e.type === "done") {
           return {
             reply: e.reply ?? partial,

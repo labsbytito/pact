@@ -6,6 +6,7 @@ import { Transcript } from "../../components/chat/Transcript";
 import { PactList } from "../../components/library/PactList";
 import { PactHeader } from "../../components/pact/PactHeader";
 import { SettingsSheet, type SettingsPage } from "../../components/settings/SettingsSheet";
+import { ReachBanner } from "../../components/system/ReachBanner";
 import { ServerState } from "../../components/system/ServerState";
 import { useDictation } from "../../hooks/useDictation";
 import { useHealth } from "../../hooks/useHealth";
@@ -126,7 +127,12 @@ export default function App() {
     setSettingsPage("Connections");
     setView("settings");
   }
-  const showComposer = view === "home" && ready;
+  const down = link.kind === "offline" || link.kind === "limited" || link.kind === "unconfigured";
+  const showComposer = view === "home" && (ready || Boolean(active));
+  function retryReply() {
+    const text = [...(active?.messages ?? [])].reverse().find((item) => item.role === "user")?.text ?? "";
+    if (text) void turn.send(active, active?.source ?? source, text, undefined, true);
+  }
   const heading = view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact";
   return (
     <div className={showComposer ? "app with-composer" : "app"}>
@@ -141,18 +147,25 @@ export default function App() {
       />
       <div className="scroll">
         <div className="pane">
-          {link.kind === "loading" && view !== "settings" ? (
-            <p className="site-line">Opening Pact…</p>
-          ) : !ready && view !== "settings" ? (
-            <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
-          ) : view === "settings" ? (
+          {view === "settings" ? (
             <SettingsSheet settings={settings} onChange={updateSettings} fo={health?.fo} navWide={navWide} page={settingsPage} onPage={setSettingsPage} onRefresh={() => void refresh()} onDeleted={() => void deleted()} demo={!!health?.demo} />
           ) : view === "list" ? (
-            <PactList pacts={pacts.filter((item) => !item.archived)} appearance={settings.companion} onOpen={(id) => { setActiveId(id); setView("home"); }} />
+            <>
+              {down && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
+              <PactList pacts={pacts.filter((item) => !item.archived)} appearance={settings.companion} onOpen={(id) => { setActiveId(id); setView("home"); }} />
+            </>
+          ) : link.kind === "loading" && !active ? (
+            <p className="site-line">Opening Pact…</p>
+          ) : down && !active ? (
+            <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : !active ? (
             <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
           ) : (
-            <Transcript active={active} busy={turn.busy} streaming={turn.streaming} signedOut={signedOut} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact)} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
+            <>
+              {down && <ReachBanner title="Can’t reach Pact" detail="Your conversation is still here." onRetry={() => void refresh()} />}
+              <Transcript active={active} busy={turn.busy} streaming={turn.streaming} signedOut={signedOut} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact)} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
+              {turn.replyError && <ReachBanner title={turn.replyError} onRetry={retryReply} />}
+            </>
           )}
           {turn.note && <p className="note">{turn.note}</p>}
         </div>

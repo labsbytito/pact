@@ -103,14 +103,20 @@ export function redisRestEnv() {
 export function redisStore(): Store {
   const creds = redisRestEnv();
   if (!creds) throw new Error("Redis REST credentials are not set");
+  // Journal, rate limits, Fo tokens, threads, and usage all JSON.parse this
+  // string. Default deserialization turns a stored JSON string into an object,
+  // and String(object) is "[object Object]".
   const redis = new Redis({
     url: creds.url,
     token: creds.token,
+    automaticDeserialization: false,
+    enableAutoPipelining: false,
   });
   return {
     async get(key) {
       const value = await redis.get<string>(key);
-      return value == null ? null : String(value);
+      if (value == null) return null;
+      return typeof value === "string" ? value : JSON.stringify(value);
     },
     async set(key, value, ttlSeconds) {
       if (ttlSeconds) await redis.set(key, value, { ex: ttlSeconds });

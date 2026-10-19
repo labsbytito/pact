@@ -122,6 +122,28 @@ test("submit flow surfaces AI offline with a specific ApiError", async () => {
   }
 });
 
+test("stream error events stay visible as an ApiError", async () => {
+  globalThis.fetch = (async () => {
+    const sse = `data: ${JSON.stringify({ type: "error", error: '"[object Object]" is not valid JSON' })}\n\n`;
+    return new Response(sse, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => interpretLive(makePact("Broken reply"), []),
+      (e: unknown) =>
+        e instanceof ApiError &&
+        e.status === 502 &&
+        e.message === "Pact couldn't finish that reply.",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("stopped SSE becomes AbortInterpretError keeping partial text", async () => {
   globalThis.fetch = (async () => {
     const sse = `data: ${JSON.stringify({ type: "delta", text: "Part" })}\n\ndata: ${JSON.stringify({ type: "stopped", reply: "Part" })}\n\n`;

@@ -11,6 +11,7 @@ export function useTurn(save: (pact: Pact) => void) {
   const [streaming, setStreaming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [replyError, setReplyError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<number | null>(null);
   const approving = useRef(false);
@@ -94,17 +95,23 @@ export function useTurn(save: (pact: Pact) => void) {
     source: Source | undefined,
     text: string,
     onReady?: (pact: Pact) => void,
+    reuseFailed = false,
   ) {
     const trimmed = text.trim();
     if (!trimmed || streaming) return current;
     setNote("");
-    setDraft("");
+    setReplyError("");
+    if (!reuseFailed) setDraft("");
     const created = !current;
-    const base = current
-      ? { ...current, messages: [...current.messages, message("user", trimmed)], updatedAt: now(), source: current.source ?? source }
-      : makePact(trimmed, source);
-    const assistant = message("assistant", "");
-    let pact = remember({ ...base, messages: [...base.messages, assistant] });
+    const tail = current?.messages.at(-1);
+    const reuse = Boolean(reuseFailed && current && tail?.role === "assistant" && !tail.text.trim());
+    const assistant = reuse ? { ...tail!, text: "", stopped: false } : message("assistant", "");
+    const base = reuse
+      ? { ...current!, messages: current!.messages.map((item) => item.id === assistant.id ? assistant : item), updatedAt: now(), source: current!.source ?? source }
+      : current
+        ? { ...current, messages: [...current.messages, message("user", trimmed)], updatedAt: now(), source: current.source ?? source }
+        : makePact(trimmed, source);
+    let pact = reuse ? remember(base) : remember({ ...base, messages: [...base.messages, assistant] });
     onReady?.(pact);
     setStreaming(true);
     const abort = new AbortController();
@@ -166,7 +173,7 @@ export function useTurn(save: (pact: Pact) => void) {
         });
         return pact;
       }
-      setNote(error instanceof Error ? error.message : "Pact could not reply.");
+      setReplyError(error instanceof Error ? error.message : "Pact couldn't finish that reply.");
       return latest.current.get(pact.id) ?? pact;
     } finally {
       setStreaming(false);
@@ -233,5 +240,5 @@ export function useTurn(save: (pact: Pact) => void) {
 
   function stop() { abortRef.current?.abort(); }
 
-  return { draft, setDraft, streaming, busy, note, setNote, send, approve, cancel, stop, watch, recover, prefs };
+  return { draft, setDraft, streaming, busy, note, setNote, replyError, send, approve, cancel, stop, watch, recover, prefs };
 }
