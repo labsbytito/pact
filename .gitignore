@@ -9,6 +9,7 @@ node_modules/
 .local/
 backend/.local/
 backend/.next/
+backend/tsconfig.tsbuildinfo
 *.log
 .DS_Store
 .impeccable/
