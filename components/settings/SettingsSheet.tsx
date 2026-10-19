@@ -73,7 +73,7 @@ export function SettingsSheet({
         <h2>{page}</h2>
         {page === "General" && <General settings={settings} onChange={onChange} />}
         {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} />}
-        {page === "Companion" && <Companion companion={companion} onChange={onChange} />}
+        {page === "Companion" && <><p className="conn-note">Default for new Pacts. Existing companions keep their final choice. Choose a name, shape and color when you create a new Pact.</p><Companion companion={companion} onChange={onChange} /></>}
         {page === "About" && <About demo={demo} />}
       </div>
     </div>

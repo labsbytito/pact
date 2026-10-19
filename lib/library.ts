@@ -41,7 +41,7 @@ export function groupLibraryPacts(
 ): LibraryGroup[] {
   const needle = opts.query.trim().toLowerCase();
   const matches = (p: Pact) => {
-    if (!!p.archived !== opts.archived) return false;
+    if (p.deletedAt || !!p.archived !== opts.archived) return false;
     if (!needle) return true;
     if (`${p.title} ${p.intention}`.toLowerCase().includes(needle)) return true;
     return p.messages.some((m) => m.text.toLowerCase().includes(needle));

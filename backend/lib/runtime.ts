@@ -27,7 +27,7 @@ type Session = {
 
 async function connectFo(id: string, store: Store, redirectUrl: string): Promise<FoConn> {
   const key = foKeyBytes();
-  return createFoConnection({
+  const connection = await createFoConnection({
     load: () => store.get(`fo:${id}`),
     save: (json) => store.set(`fo:${id}`, json),
     redirectUrl,
@@ -37,10 +37,11 @@ async function connectFo(id: string, store: Store, redirectUrl: string): Promise
     createTransport: (url, authProvider) =>
       new StreamableHTTPClientTransport(url, { authProvider }) as never,
   });
+  return connection;
 }
 
 /** Fresh journal, threads, and Fo tokens on every call. Nothing is cached in memory or written to disk. */
-export async function sessionFor(installId: string, req?: Request) {
+export async function sessionFor(installId: string, req?: Request, connections: { connect?: typeof connectFo } = {}) {
   const store = openStore();
   const actions = await ActionStore.load(
     "store://journal",
@@ -53,7 +54,8 @@ export async function sessionFor(installId: string, req?: Request) {
   const threads = await Threads.openStore(store, `threads:${installId}`);
   const fo = foMocked()
     ? undefined
-    : await connectFo(installId, store, `${publicBase(req)}/api/fo/callback`);
+    : await (connections.connect ?? connectFo)(installId, store, `${publicBase(req)}/api/fo/callback`);
+  await fo?.restore();
   return { id: installId, actions, threads, fo };
 }
 

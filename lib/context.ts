@@ -45,7 +45,8 @@ export function interpretationContext(
         candidates.some((line) => line.text.length > 1000),
     };
   }
-  const wired = wireAttachments(attachments).slice(0, 3);
+  const recentFiles = pact.messages.slice(-24).flatMap((m) => m.attachments ?? []).slice(-3);
+  const wired = wireAttachments(attachments.length ? attachments : recentFiles).slice(0, 3);
   const payload = {
     responseStyle: prefs?.responseStyle === "short" ? "short" as const : "detailed" as const,
     askBefore: prefs?.askBefore === "always" ? "always" as const : "suggested" as const,
@@ -59,19 +60,12 @@ export function interpretationContext(
       attachments: wired,
     },
   };
+  const targetBytes = Math.min(2_000_000, 240000 + new TextEncoder().encode(JSON.stringify(wired)).length);
   const bytes = () => new TextEncoder().encode(JSON.stringify(payload)).length;
-  while (bytes() > 240000 && payload.pact.attachments.length) {
-    const last = payload.pact.attachments.at(-1)!;
-    if (last.data && last.data.length > 4000)
-      last.data = last.data.slice(0, Math.floor(last.data.length / 2));
-    else if (last.text && last.text.length > 400)
-      last.text = last.text.slice(0, Math.floor(last.text.length / 2));
-    else payload.pact.attachments.pop();
-  }
-  while (bytes() > 240000 && payload.pact.messages.length > 1)
+  while (bytes() > targetBytes && payload.pact.messages.length > 1)
     payload.pact.messages.shift();
-  if (bytes() > 240000 && source) source.text = source.text.slice(0, 4000);
-  while (bytes() > 240000 && source && source.transcript.length) {
+  if (bytes() > targetBytes && source) source.text = source.text.slice(0, 4000);
+  while (bytes() > targetBytes && source && source.transcript.length) {
     const farthest = source.transcript.reduce(
       (best, line, i, all) =>
         Math.abs(line.start - (source!.videoTime ?? 0)) >
@@ -90,7 +84,7 @@ export function interpretationContext(
       "selectionContext",
       "viewportText",
     ] as const) {
-      while (bytes() > 240000 && (source[key]?.length ?? 0) > 100) {
+      while (bytes() > targetBytes && (source[key]?.length ?? 0) > 100) {
         source[key] = source[key]!.slice(
           0,
           Math.floor(source[key]!.length / 2),
@@ -99,6 +93,7 @@ export function interpretationContext(
       }
     }
   }
+  if (bytes() > 2_000_000) throw new Error("These files are too large together. Remove a file and send again.");
   return payload;
 }
 export function unresolved(action?: Action) {
@@ -136,7 +131,7 @@ export function mergeReply(
 ): Pact {
   let next = {
     ...pact,
-    title: result.title ?? pact.title,
+    title: pact.titleSource === "manual" ? pact.title : result.title ?? pact.title,
     messages: [
       ...pact.messages,
       {

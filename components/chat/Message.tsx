@@ -5,12 +5,14 @@ import { Markdown } from "./Markdown";
 export function Message({
   role,
   text,
+  attachments,
   follow,
   onRetry,
   onEdit,
 }: {
   role: "user" | "assistant";
   text: string;
+  attachments?: string[];
   follow?: boolean;
   appearance?: CompanionAppearance;
   onRetry?: () => void;
@@ -20,6 +22,7 @@ export function Message({
     <div className={`msg ${role}${follow ? " follow" : ""}`} tabIndex={0}>
       <div className={`bubble ${role}`}>
         {role === "assistant" ? <Markdown text={text} /> : text}
+        {!!attachments?.length && <div className="attachment-list">{attachments.map((name, i) => <span className="attachment-chip" key={`${name}-${i}`}>{name}</span>)}</div>}
         <div className="msg-actions">
           <button type="button" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(text)}>
             <CopyIcon />

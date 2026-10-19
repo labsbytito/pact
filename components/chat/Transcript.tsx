@@ -48,6 +48,7 @@ export function Transcript({
   const prior = [...active.messages].reverse().find((entry) => entry.role === "user")?.text;
   return (
     <Thread>
+      {active.companion && <p className="conn-note">{active.companion.name} · Your companion</p>}
       {active.messages.map((item, index) => {
         const next = active.messages[index + 1];
         const previous = active.messages[index - 1];
@@ -69,7 +70,7 @@ export function Transcript({
             {item.text && (
               <Message
                 role={item.role}
-                text={item.text}
+                text={item.text} attachments={item.attachments?.map((file) => file.name)}
                 follow={previous?.role === item.role}
                 appearance={appearance}
                 onRetry={item.role === "assistant" && prior ? () => onRetry(prior) : undefined}
