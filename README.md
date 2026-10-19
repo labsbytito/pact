@@ -13,7 +13,7 @@ Pact is a Chrome side-panel companion. Open any page and ask about it — articl
 3. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**, and choose the unzipped folder (the one containing `manifest.json`).
 4. Pin Pact, open any web page, click the icon.
 
-No terminal, API key or local server needed — the extension talks to the hosted backend. Chrome only allows one-click installs from the Web Store; a Store listing is in progress.
+No terminal, API key or local server needed — the extension talks to the hosted backend. Chrome only allows one-click installs from the Web Store; a Store listing is planned.
 
 To act on real accounts, open **Settings → Connections → Connect Fo** and sign in with your own Fo account.
 
@@ -44,7 +44,7 @@ extension (WXT + React, MV3)  ──HTTPS──▶  backend (Next.js on Vercel) 
 
 - Nothing is sent to Fo without an approval click, except plain research you explicitly asked for.
 - Page access uses Chrome's `activeTab` plus a one-time per-site permission you grant. Restricted pages are never read.
-- Open the source: the backend refuses unknown extension IDs, keeps no chat content, and never logs tokens.
+- It's open source, so you can read exactly what the backend does. It only accepts requests from this extension's ID, and Fo credentials are stored encrypted.
 
 ## Develop
 
