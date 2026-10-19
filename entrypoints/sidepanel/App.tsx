@@ -152,7 +152,7 @@ export default function App() {
     const text = [...(active?.messages ?? [])].reverse().find((item) => item.role === "user")?.text ?? "";
     if (text) void turn.send(active, active?.source ?? source, text, undefined, true);
   }
-  const heading = creating ? "New chat" : view === "settings" ? "Settings" : view === "list" ? "Chats" : active?.title || "Pact";
+  const heading = creating ? "New Pact" : view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact";
   return (
     <div className={showComposer ? "app with-composer" : "app"}>
       <PactHeader
@@ -170,8 +170,8 @@ export default function App() {
             <SettingsSheet settings={settings} onChange={updateSettings} fo={health?.fo} navWide={navWide} page={settingsPage} onPage={setSettingsPage} onRefresh={() => void refresh()} onDeleted={() => void deleted()} demo={!!health?.demo} />
           ) : view === "list" ? (
             <>
-              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your chats are still saved on this computer." onRetry={() => void refresh()} />}
-              <PactList pacts={pacts} activeId={activeId} appearance={appearance} onChange={change} onNew={() => { setCreating(true); setView("home"); }} onOpen={(id) => { turn.setAttachments([]); turn.setDraft(""); setSource(undefined); setActiveId(id); setView("home"); }} />
+              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
+              <PactList pacts={pacts} activeId={activeId} appearance={appearance} onChange={change} onConnect={openConnections} onNew={() => { setCreating(true); setView("home"); }} onOpen={(id) => { turn.setAttachments([]); turn.setDraft(""); setSource(undefined); setActiveId(id); setView("home"); }} />
             </>
           ) : link.kind === "loading" && !active ? (
             <p className="site-line">Opening Pact…</p>
@@ -179,7 +179,7 @@ export default function App() {
             <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : "limited"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={appearance} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : !active || !active.messages.length ? (
             <>
-              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your chats are still saved on this computer." onRetry={() => void refresh()} />}
+              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
               <EmptyState companionName={active?.companion?.name} onRead={() => requestPage()} onSummarize={() => requestPage("Summarize this page")} appearance={appearance} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
             </>
           ) : (

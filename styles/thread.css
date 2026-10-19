@@ -503,3 +503,15 @@ html[data-motion="reduced"] .live-dot { animation: none; }
 .library-look-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .library-look-actions button { border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; background: var(--fill-hover); color: var(--text-1); }
 .library-look-actions button[type="submit"] { background: var(--action); color: var(--on-action); }
+
+/* History as a sidebar-style list: roomy rows, glass highlight, sticky Connect tools. */
+.library .list-row { min-height: 64px; padding: 10px 40px 10px 10px; gap: 14px; border: 1px solid transparent; border-radius: 14px; }
+.library .list-title { font-size: 15px; line-height: 20px; }
+.library .list-preview { font-size: 13px; line-height: 18px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.library .list-row:hover { background: var(--fill-hover); }
+.library .library-item[data-active="true"] > .list-row, .library .list-row[aria-current="true"] { background: var(--glass-bg); border-color: var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow); }
+.library .section-label { margin: 18px 10px 6px; letter-spacing: .01em; }
+.library { padding-bottom: 120px; }
+.library-connect { position: sticky; bottom: 12px; margin: 18px 4px 0; height: 44px; border-radius: 9999px; font: inherit; font-size: 14px; font-weight: 500; color: var(--text-1); cursor: pointer; }
+.library .list-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; }
+.library .list-row .blob { justify-self: center; }

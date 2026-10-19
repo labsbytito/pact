@@ -37,7 +37,8 @@ export function useDictation(
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, []);
 
-  async function dictate() {
+  const busy = useRef(false);
+  async function run() {
     if (listening) {
       recRef.current?.stop();
       setListening(false);
@@ -144,6 +145,11 @@ export function useDictation(
     }
   }
 
+  async function dictate() {
+    if (busy.current) return;
+    busy.current = true;
+    try { await run(); } finally { busy.current = false; }
+  }
   latest.current = dictate;
   return { listening, dictate };
 }

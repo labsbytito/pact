@@ -43,6 +43,7 @@ export function PactList({
   onOpen,
   onChange,
   onNew,
+  onConnect,
 }: {
   pacts: Pact[];
   activeId?: string | null;
@@ -50,6 +51,7 @@ export function PactList({
   onOpen: (id: string) => void;
   onChange?: (id: string, command: Command, arg?: string | PactCompanion) => void;
   onNew?: () => void;
+  onConnect?: () => void;
 }) {
   const [archived, setArchived] = useState(false);
   const [query, setQuery] = useState("");
@@ -76,6 +78,12 @@ export function PactList({
   const shown = sortLibraryPacts(pacts.filter((p) => !p.deletedAt && !!p.archived === archived && matches(p)));
   const pinned = shown.filter((p) => p.pinned);
   const rest = shown.filter((p) => !p.pinned);
+  const dayStart = new Date().setHours(0, 0, 0, 0);
+  const bucket = (pact: Pact) => {
+    const age = dayStart - new Date(pact.updatedAt).setHours(0, 0, 0, 0);
+    return age <= 0 ? "Today" : age <= 86400000 ? "Yesterday" : age <= 6 * 86400000 ? "This week" : "Earlier";
+  };
+  const buckets = ["Today", "Yesterday", "This week", "Earlier"].map((name) => ({ name, items: rest.filter((p) => bucket(p) === name) })).filter((group) => group.items.length);
   const archivedCount = pacts.filter((p) => !p.deletedAt && p.archived).length;
 
   function commitRename(pact: Pact) {
@@ -128,7 +136,7 @@ export function PactList({
         ) : (
           <>
             <button className="list-row" type="button" aria-current={pact.id === activeId ? "true" : undefined} onClick={() => onOpen(pact.id)}>
-              <PactBlob size={20} state="still" appearance={pact.companion?.appearance ?? appearance} />
+              <PactBlob size={40} state="still" appearance={pact.companion?.appearance ?? appearance} />
               <span className="list-copy">
                 <span className="list-title">
                   {pact.pinned && <Pin size={11} aria-label="Pinned" className="list-pin" />}
@@ -164,19 +172,24 @@ export function PactList({
       <div className="library-tools">
         <label className="library-search">
           <Search size={14} aria-hidden="true" />
-          <input type="search" value={query} placeholder="Search chats" aria-label="Search chats" onChange={(event) => setQuery(event.target.value)} />
+          <input type="search" value={query} placeholder="Search Pacts" aria-label="Search Pacts" onChange={(event) => setQuery(event.target.value)} />
         </label>
         <button type="button" className="library-new" onClick={onNew}><Plus size={14} aria-hidden="true" />New</button>
       </div>
-      <div className="library-tabs" role="tablist" aria-label="Chat lists">
+      <div className="library-tabs" role="tablist" aria-label="Pact lists">
         <button type="button" role="tab" aria-selected={!archived} onClick={() => setArchived(false)}>Active</button>
         <button type="button" role="tab" aria-selected={archived} onClick={() => setArchived(true)}>Archived{archivedCount ? ` · ${archivedCount}` : ""}</button>
       </div>
-      {!shown.length && <p className="section-label">{needle ? "No chats match that search." : archived ? "Nothing archived." : "No chats yet. Start one with New."}</p>}
+      {!shown.length && <p className="section-label">{needle ? "No Pacts match that search." : archived ? "Nothing archived." : "No Pacts yet. Start one with New."}</p>}
       {pinned.length > 0 && <p className="section-label">Pinned</p>}
       {pinned.map(row)}
-      {pinned.length > 0 && rest.length > 0 && <p className="section-label">Recent</p>}
-      {rest.map(row)}
+      {buckets.map((group) => (
+        <div key={group.name}>
+          {(pinned.length > 0 || buckets.length > 1) && <p className="section-label">{group.name}</p>}
+          {group.items.map(row)}
+        </div>
+      ))}
+      {onConnect && <button type="button" className="library-connect glass" onClick={onConnect}>Connect tools</button>}
     </div>
   );
 }
