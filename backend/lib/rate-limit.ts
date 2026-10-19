@@ -48,7 +48,7 @@ export async function limitApproval(store: Store, installId: string) {
 }
 
 export async function limitInstall(store: Store, ip: string) {
-  await hit(store, `rl:ip:${ip}:hour`, limit("PACT_RL_INSTALLS_HOUR", 5), 3600);
+  await hit(store, `rl:ip:${ip}:hour`, limit("PACT_RL_INSTALLS_HOUR", 60), 3600);
 }
 
 export function limitSnapshot() {

@@ -124,6 +124,8 @@ export async function capturePage(
   // unread site, separate from chrome:// and the Chrome Web Store.
   const address = tab.url || tab.pendingUrl || "";
   if (!address) throw new Error(PAGE_NOT_VISIBLE);
+  if (isPdfAddress(address) && mode !== "page")
+    throw new Error("Selecting items doesn't work inside a PDF. Use Read this page, or copy the text you need and paste it here.");
   if (pageAccess(address) === "restricted" && !isPdfAddress(address)) throw new Error(PROTECTED_PAGE);
   if (mode === "page" && !request && (isPdfAddress(address) || (await isPdfDocument(target.tabId)))) {
     const pdf = await readPdfSource(address, tab.title);

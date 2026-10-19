@@ -26,9 +26,9 @@ test("AES-GCM round trip and a tampered payload fails", () => {
   assert.throws(() => decryptString(broken, key));
 });
 
-test("rate limit allows five installs an hour then refuses", async () => {
+test("rate limit allows a roomful of installs an hour, then refuses", async () => {
   const store = memoryStore();
-  for (let i = 0; i < 5; i++) await limitInstall(store, "203.0.113.4");
+  for (let i = 0; i < 60; i++) await limitInstall(store, "203.0.113.4");
   await assert.rejects(() => limitInstall(store, "203.0.113.4"));
 });
 

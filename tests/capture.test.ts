@@ -273,9 +273,17 @@ test("a pdf is reported directly and is not injected", async (t) => {
     "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
   ]) {
     const state = setup(t, { tabUrl });
-    await assert.rejects(capturePage("pick"), /can't read PDFs/);
+    await assert.rejects(capturePage("pick"), /doesn't work inside a PDF/);
     assert.equal(state.executions, 0, tabUrl);
   }
+});
+test("reading a pdf tab fetches the document instead of injecting a script", async (t) => {
+  const state = setup(t, { tabUrl: "https://example.org/files/notes.pdf" });
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("<html>not a pdf</html>", { headers: { "content-type": "text/html" } })) as typeof fetch;
+  t.after(() => { globalThis.fetch = original; });
+  await assert.rejects(capturePage("page"), /couldn't open this PDF/);
+  assert.equal(state.executions, 0);
 });
 test("a missing host permission asks for one-click access instead of an empty read", async (t) => {
   const { chrome } = setup(t);
