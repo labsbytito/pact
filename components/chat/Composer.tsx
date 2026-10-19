@@ -34,6 +34,18 @@ export function Composer({
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const depth = useRef(0);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The transcript keeps clear of the composer however tall it grows (attachments, notes, multi-line text).
+    const el = wrap.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const sync = () => root.style.setProperty("--composer-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => { observer.disconnect(); root.style.removeProperty("--composer-h"); };
+  }, []);
   async function attach(files: File[]) {
     if (files.length + attachments.length > ATTACHMENT_LIMITS.maxFiles) { setError("Attach up to 3 files at a time."); return; }
     setPreparing(true); setError("");
@@ -53,6 +65,7 @@ export function Composer({
   }, [value]);
   return (
     <div
+      ref={wrap}
       className="composer-wrap"
       data-dragging={dragging || undefined}
       onDragEnter={(event) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); depth.current += 1; setDragging(true); }}
