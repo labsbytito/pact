@@ -8,7 +8,7 @@ Pact is a Chrome side-panel companion. Open any page and ask about it — articl
 
 ## Try it (about a minute)
 
-1. **Download** the latest [`pact-judges.zip`](https://github.com/labsbytito/pact/releases/latest) (also on the [website](https://withpact.vercel.app)).
+1. **Download** the latest [`pact-judges.zip`](https://github.com/labsbytito/pact-for-chrome/releases/latest) (also on the [website](https://withpact.vercel.app)).
 2. **Unzip it** and keep the folder somewhere permanent.
 3. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**, and choose the unzipped folder (the one containing `manifest.json`).
 4. Pin Pact, open any web page, click the icon.
