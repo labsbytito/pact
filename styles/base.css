@@ -32,10 +32,21 @@ a { color: var(--accent); }
   position: sticky;
   top: 0;
   z-index: 3;
+  flex: none;
+  margin-left: -12px;
+  margin-right: -12px;
 }
 .topbar.glass {
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+}
+@supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+  html:not([data-motion="reduced"]):not([data-motion="off"]) .topbar.glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
 }
 .topbar h1 {
   margin: 0;
@@ -64,10 +75,17 @@ a { color: var(--accent); }
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
 }
+.pane { flex: 1 0 auto; display: flex; flex-direction: column; padding: 4px 0 12px; }
+.pane > .empty, .pane > .settings, .pane > .server { flex: 1; min-height: 0; }
+.dock { position: sticky; bottom: 0; z-index: 3; margin-top: auto; margin-left: -12px; margin-right: -12px; }
 @media (min-width: 420px) {
-  .scroll, .topbar { padding-left: 16px; padding-right: 16px; }
+  .scroll { padding-left: 16px; padding-right: 16px; }
+  .topbar, .dock { margin-left: -16px; margin-right: -16px; }
+  .topbar { padding-left: 16px; padding-right: 16px; }
 }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .brand h1 { flex: 1; }

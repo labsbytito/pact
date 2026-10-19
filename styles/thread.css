@@ -163,11 +163,13 @@
 .journal-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
 .journal-status { color: var(--text-3); flex: none; }
 .composer-wrap {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   padding: 8px 12px 12px;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
+}
+.dock .chips { margin: 0; padding: 8px 12px 0; }
+@media (min-width: 420px) {
+  .composer-wrap { padding-left: 16px; padding-right: 16px; }
+  .dock .chips { padding-left: 16px; padding-right: 16px; }
 }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .chip {
@@ -193,6 +195,14 @@
   border-radius: 9999px;
   background: var(--surface-2);
   border: 1px solid var(--hairline);
+}
+@supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+  html:not([data-motion="reduced"]):not([data-motion="off"]) .composer {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
 }
 .composer:focus-within { border-color: var(--accent); }
 .composer textarea {

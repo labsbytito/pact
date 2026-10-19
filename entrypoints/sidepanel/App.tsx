@@ -103,42 +103,45 @@ export default function App() {
   function send() {
     void turn.send(active, source ?? active?.source, turn.draft, (created) => setActiveId(created.id));
   }
+  const showComposer = view !== "settings" && ready && view !== "list";
   return (
     <div className="app">
-      <PactHeader
-        title={view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact"}
-        caption={view === "home" ? caption : ""}
-        live={view !== "home" || Boolean(active)}
-        state={state}
-        appearance={settings.companion}
-        demo={!!health?.demo}
-        glass={glass}
-        onBack={view === "list" ? () => setView("home") : undefined}
-        onList={view === "home" ? () => setView("list") : undefined}
-        onSettings={() => setView(view === "settings" ? "home" : "settings")}
-      />
       <div className="scroll" onScroll={(event) => setGlass(event.currentTarget.scrollTop > 4)}>
-        {link.kind === "loading" && view !== "settings" ? (
-          <p className="site-line">Opening Pact…</p>
-        ) : !ready && view !== "settings" ? (
-          <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
-        ) : view === "settings" ? (
-          <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} onRefresh={() => void refresh()} onDeleted={() => void deleted()} />
-        ) : view === "list" ? (
-          <PactList pacts={pacts.filter((item) => !item.archived)} onOpen={(id) => { setActiveId(id); setView("home"); }} />
-        ) : !active ? (
-          <EmptyState appearance={settings.companion} site={siteLine(page)} chips={askChips(page)} onRead={() => void readPage()} onAsk={turn.setDraft} />
-        ) : (
-          <Home active={active} streaming={turn.streaming} step={step} busy={turn.busy} signedOut={link.kind === "fo"} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact).then((next) => next && setActiveId(next.id))} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active?.source ?? source, text)} />
+        <PactHeader
+          title={view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact"}
+          caption={view === "home" ? caption : ""}
+          live={view !== "home" || Boolean(active)}
+          state={state}
+          appearance={settings.companion}
+          demo={!!health?.demo}
+          glass={glass}
+          onBack={view === "list" ? () => setView("home") : undefined}
+          onList={view === "home" ? () => setView("list") : undefined}
+          onSettings={() => setView(view === "settings" ? "home" : "settings")}
+        />
+        <div className="pane">
+          {link.kind === "loading" && view !== "settings" ? (
+            <p className="site-line">Opening Pact…</p>
+          ) : !ready && view !== "settings" ? (
+            <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
+          ) : view === "settings" ? (
+            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} onRefresh={() => void refresh()} onDeleted={() => void deleted()} />
+          ) : view === "list" ? (
+            <PactList pacts={pacts.filter((item) => !item.archived)} onOpen={(id) => { setActiveId(id); setView("home"); }} />
+          ) : !active ? (
+            <EmptyState appearance={settings.companion} site={siteLine(page)} chips={askChips(page)} onRead={() => void readPage()} onAsk={turn.setDraft} />
+          ) : (
+            <Home active={active} streaming={turn.streaming} step={step} busy={turn.busy} signedOut={link.kind === "fo"} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact).then((next) => next && setActiveId(next.id))} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active?.source ?? source, text)} />
+          )}
+          {turn.note && <p className="note">{turn.note}</p>}
+        </div>
+        {showComposer && (
+          <div className="dock">
+            {(active?.source ?? source) && <SourceChip source={(active?.source ?? source)!} />}
+            <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} />
+          </div>
         )}
-        {turn.note && <p className="note">{turn.note}</p>}
       </div>
-      {view !== "settings" && ready && view !== "list" && (
-        <>
-          {(active?.source ?? source) && <SourceChip source={(active?.source ?? source)!} />}
-          <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} />
-        </>
-      )}
     </div>
   );
 }

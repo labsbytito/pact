@@ -18,6 +18,8 @@
   --unread: #6199f8;
   --danger: #d93025;
   --fill-hover: rgba(0, 0, 0, 0.04);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
   --r-row: 6px;
   --r-card: 10px;
   --r-control: 8px;
@@ -48,6 +50,8 @@
   --unread: #6199f8;
   --danger: #ff6363;
   --fill-hover: rgba(255, 255, 255, 0.05);
+  --glass: rgba(31, 31, 31, 0.72);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
   --accent: var(--toggle-on);
   --on-accent: #ffffff;
 }
