@@ -484,3 +484,15 @@ html[data-motion="reduced"] .live-dot { animation: none; }
 
 .library { padding-bottom: 220px; }
 .tile-hint { display: block; font-size: 11px; line-height: 14px; color: var(--text-3); margin-top: 1px; }
+
+/* Empty state: centred like the assistants people already know, with one obvious first action. */
+.empty { justify-content: center; align-items: center; text-align: center; padding-bottom: 56px; }
+.empty .msg { align-self: center; }
+.empty .ask-row, .empty .tool-row, .empty .can-use { justify-content: center; text-align: center; }
+.empty .ask-row { flex-wrap: wrap; }
+.can-use { width: 100%; }
+.summarize-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; margin: 4px 0 14px; border: 0; border-radius: 9999px; background: var(--action); color: var(--on-action); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); }
+.summarize-btn:hover { filter: brightness(1.12); }
+.composer .composer-tool.mic { color: var(--text-1); opacity: .72; }
+.composer .composer-tool.mic:hover { opacity: 1; }
+.can-use p { margin: 0 auto 6px; text-align: center; }

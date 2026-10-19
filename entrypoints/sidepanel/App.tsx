@@ -118,12 +118,12 @@ export default function App() {
     setView("home");
     void refresh();
   }
-  function requestPage() {
+  function requestPage(afterText?: string) {
     // Start permission request synchronously from the click.
     const granted = requestSiteRead(sitePatternFromUrl(page?.url));
-    void granted.then((ok) => { if (ok) void readPage(); else turn.setNote("Page access was not allowed. You can still chat or attach a file."); }).catch((e) => turn.setNote(e.message));
+    void granted.then((ok) => { if (ok) void readPage(afterText); else turn.setNote("Page access was not allowed. You can still chat or attach a file."); }).catch((e) => turn.setNote(e.message));
   }
-  async function readPage() {
+  async function readPage(afterText?: string) {
     setReading(true);
     try {
       const next = await capturePage("page");
@@ -132,6 +132,7 @@ export default function App() {
       setPage({ title: next.title, url: next.url, host: hostOf(next.url) });
       turn.setNote("");
       setView("home");
+      if (afterText) void turn.send(active, next, afterText, (created) => setActiveId(created.id));
     } catch (error) {
       turn.setNote(error instanceof Error ? error.message : "Pact could not read this page.");
     } finally {
@@ -179,7 +180,7 @@ export default function App() {
           ) : !active || !active.messages.length ? (
             <>
               {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
-              <EmptyState companionName={active?.companion?.name} onRead={requestPage} appearance={appearance} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
+              <EmptyState companionName={active?.companion?.name} onRead={() => requestPage()} onSummarize={() => requestPage("Summarize this page")} appearance={appearance} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
             </>
           ) : (
             <>

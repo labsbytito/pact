@@ -14,6 +14,7 @@ export function EmptyState({
   pageConnected,
   onOpenConnections,
   onAsk,
+  onSummarize,
 }: {
   appearance?: CompanionAppearance;
   state?: BlobState;
@@ -25,6 +26,7 @@ export function EmptyState({
   pageConnected?: boolean;
   onOpenConnections: () => void;
   onAsk: (text: string) => void;
+  onSummarize?: () => void;
 }) {
   const hello = title
     ? `Hi! I’m ${companionName}. Ask me anything, or share ${title} for context.`
@@ -39,6 +41,12 @@ export function EmptyState({
       <div className="msg assistant">
         <div className="bubble assistant">{hello}</div>
       </div>
+      {onSummarize && (
+        <button className="summarize-btn" type="button" onClick={onSummarize}>
+          <FileText size={15} strokeWidth={1.9} aria-hidden="true" />
+          Summarize this page
+        </button>
+      )}
       <div className="ask-row">
         {chips.slice(0, 2).map((chip) => (
           <button key={chip} className="ask-chip glass" type="button" onClick={() => onAsk(chip)}>{chip}</button>
