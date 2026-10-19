@@ -37,9 +37,11 @@ export type Character = {
   };
 };
 
+export type CompanionMood = "idle" | "happy" | "thinking" | "sleepy";
 export type CompanionAppearance = {
   shape: number;
   color: string;
+  mood?: CompanionMood;
 };
 
 export const BRAND_SEED = "pact.brand";
@@ -58,44 +60,62 @@ export const PALETTE = [
   "#A855F7", // violet
   "#FB923C", // soft orange
   "#0EA5E9", // sky
+  "#22C55E", // mint
+  "#6366F1", // indigo
+  "#FB7185", // coral
 ] as const;
 
 /**
- * Flat silhouettes in a 72×72 viewBox — Grok Bot family.
- * 0 circle, 1 squircle, 2 rounded triangle, 3 teardrop, 4 cloud/scallop,
- * 5 four-lobe clover, 6 hexagon, 7 rounded square, 8 tilted pebble.
+ * Flat silhouettes in a 72×72 viewBox.
+ * 0 circle, 1 soft triangle, 2 tilted square, 3 pill, 4 cloud,
+ * 5 heart, 6 soft star, 7 drop, 8 bean, 9 ghost, 10 soft hexagon, 11 flower.
  */
 export const SHAPES: readonly string[] = [
-  // 0 circle
   "M36 8C51.464 8 64 20.536 64 36C64 51.464 51.464 64 36 64C20.536 64 8 51.464 8 36C8 20.536 20.536 8 36 8Z",
-  // 1 squircle
-  "M18 18C18 12 24 8 36 8C48 8 54 12 54 18C54 24 58 30 58 36C58 42 54 48 54 54C54 60 48 64 36 64C24 64 18 60 18 54C18 48 14 42 14 36C14 30 18 24 18 18Z",
-  // 2 rounded triangle / gumdrop
-  "M36 10C44 10 54 22 56 36C58 50 50 62 36 62C22 62 14 50 16 36C18 22 28 10 36 10Z",
-  // 3 teardrop
-  "M36 8C48 20 58 30 58 42C58 54 48 62 36 62C24 62 14 54 14 42C14 30 24 20 36 8Z",
-  // 4 cloud / scallop — chunky Grok Bot teal-cloud silhouette
-  "M18 38C14 30 18 20 28 18C30 10 42 8 50 14C58 12 66 20 64 30C70 34 70 46 62 50C64 60 54 66 44 62C38 68 26 66 22 58C12 58 8 46 14 38C14 38 16 38 18 38Z",
-  // 5 four-lobe clover — fat round petals like Grok Bot’s red clover
-  "M36 12C44 12 50 18 50 26C58 22 68 28 68 38C68 46 60 52 52 50C60 54 66 62 60 68C54 74 44 70 40 62C40 70 32 74 26 70C18 66 18 56 24 50C16 52 8 46 8 38C8 28 18 22 26 26C26 18 28 12 36 12Z",
-  // 6 hexagon (soft)
-  "M36 8L56 20V44L36 56L16 44V20L36 8Z",
-  // 7 rounded square
-  "M14 20C14 12 20 8 28 8H44C52 8 58 12 58 20V44C58 52 52 58 44 58H28C20 58 14 52 14 44V20Z",
-  // 8 tilted pebble / soft pill
-  "M22 18C32 10 50 12 56 24C62 36 54 54 40 58C26 62 12 50 14 36C15 28 16 22 22 18Z",
+  "M36 12C42 12 56 30 58 44C60 58 50 64 36 64C22 64 12 58 14 44C16 30 30 12 36 12Z",
+  "M24 16C34 8 50 10 56 20C62 30 58 46 50 54C42 62 24 60 16 50C8 40 10 24 24 16Z",
+  "M36 8C48 8 56 16 56 28V44C56 56 48 64 36 64C24 64 16 56 16 44V28C16 16 24 8 36 8Z",
+  "M22 40C16 34 18 24 28 22C30 14 42 12 48 18C56 14 66 22 62 32C68 36 66 48 56 50C58 60 46 66 36 60C28 66 16 60 18 50C10 48 8 36 16 32C16 32 18 36 22 40Z",
+  "M36 58C18 46 10 36 10 26C10 16 18 10 28 12C32 13 36 18 36 22C36 18 40 13 44 12C54 10 62 16 62 26C62 36 54 46 36 58Z",
+  "M36 8C38 24 48 28 64 30C48 34 40 42 36 64C32 42 24 34 8 30C24 28 34 24 36 8Z",
+  "M36 8C50 22 60 32 60 44C60 56 50 64 36 64C22 64 12 56 12 44C12 32 22 22 36 8Z",
+  "M28 16C40 10 54 16 58 28C62 40 54 54 42 58C30 62 16 52 16 40C16 28 18 22 28 16Z",
+  "M22 30C22 16 28 8 36 8C44 8 50 16 50 30V50C50 56 46 54 44 50C42 46 38 52 36 50C34 48 30 54 28 50C26 46 22 56 22 50V30Z",
+  "M36 10L54 20C58 24 60 28 60 34V46C60 52 56 56 50 58L36 64L22 58C16 56 12 52 12 46V34C12 28 14 24 18 20Z",
+  "M36 30C36 18 28 12 36 6C44 12 36 18 36 30C48 22 58 16 64 24C56 32 46 32 36 30C48 38 56 48 48 56C38 48 36 38 36 30C36 42 28 54 18 56C12 46 22 36 36 30C24 32 14 24 8 16C16 10 26 20 36 30Z",
+];
+
+type Face = { tilt: number; cx: number; cy: number; gap: number; rotate: number; lookX: number; lookY: number };
+
+/** Stable personality per shape: a lean, and where the eyes sit. */
+export const FACES: readonly Face[] = [
+  { tilt: 0, cx: 36, cy: 34, gap: 11, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: -6, cx: 36, cy: 40, gap: 10, rotate: -4, lookX: -1, lookY: 1 },
+  { tilt: 10, cx: 34, cy: 36, gap: 10, rotate: 8, lookX: 1, lookY: 0 },
+  { tilt: 0, cx: 36, cy: 32, gap: 9, rotate: 0, lookX: 0, lookY: -1 },
+  { tilt: -4, cx: 38, cy: 36, gap: 12, rotate: -3, lookX: 1, lookY: 0 },
+  { tilt: 0, cx: 36, cy: 32, gap: 10, rotate: 0, lookX: 0, lookY: 1 },
+  { tilt: 4, cx: 36, cy: 34, gap: 8, rotate: 6, lookX: 0, lookY: -1 },
+  { tilt: 0, cx: 36, cy: 40, gap: 10, rotate: 0, lookX: 0, lookY: 1 },
+  { tilt: -8, cx: 34, cy: 36, gap: 9, rotate: -6, lookX: -1, lookY: 0 },
+  { tilt: 0, cx: 36, cy: 32, gap: 11, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 3, cx: 36, cy: 36, gap: 10, rotate: 2, lookX: 1, lookY: 0 },
+  { tilt: -3, cx: 36, cy: 34, gap: 8, rotate: -2, lookX: 0, lookY: -1 },
 ];
 
 export const SHAPE_OPTIONS = [
   { shape: 0, name: "Circle" },
-  { shape: 1, name: "Squircle" },
-  { shape: 2, name: "Triangle" },
-  { shape: 3, name: "Teardrop" },
+  { shape: 1, name: "Triangle" },
+  { shape: 2, name: "Square" },
+  { shape: 3, name: "Pill" },
   { shape: 4, name: "Cloud" },
-  { shape: 5, name: "Clover" },
-  { shape: 6, name: "Hexagon" },
-  { shape: 7, name: "Square" },
-  { shape: 8, name: "Pebble" },
+  { shape: 5, name: "Heart" },
+  { shape: 6, name: "Star" },
+  { shape: 7, name: "Drop" },
+  { shape: 8, name: "Bean" },
+  { shape: 9, name: "Ghost" },
+  { shape: 10, name: "Hexagon" },
+  { shape: 11, name: "Flower" },
 ] as const;
 
 /** Grok Bot palette swatches for the editor. */
@@ -109,6 +129,9 @@ export const COLOR_SWATCHES = [
   { name: "Blue", color: "#3B82F6", dark: "#60A5FA" },
   { name: "White", color: "#F5F5F5", dark: "#E5E5E5" },
   { name: "Gold", color: "#EAB308", dark: "#FACC15" },
+  { name: "Mint", color: "#22C55E", dark: "#4ADE80" },
+  { name: "Indigo", color: "#6366F1", dark: "#818CF8" },
+  { name: "Coral", color: "#FB7185", dark: "#FDA4AF" },
 ] as const;
 
 export const DEFAULT_COMPANION: CompanionAppearance = {
@@ -186,12 +209,24 @@ export function brandCharacter(
   const shape = SHAPE_OPTIONS.some((option) => option.shape === appearance.shape)
     ? appearance.shape
     : DEFAULT_COMPANION.shape;
+  const face = FACES[shape] ?? FACES[0]!;
   return {
     ...base,
     shape,
     path: SHAPES[shape]!,
     color: companionColorForScheme(appearance.color, dark),
-    tilt: 0,
+    tilt: face.tilt,
+    eye: {
+      kind: "pill",
+      width: 4,
+      height: 11,
+      gap: face.gap,
+      cx: face.cx,
+      cy: face.cy,
+      rotate: face.rotate,
+      lookX: face.lookX,
+      lookY: face.lookY,
+    },
   };
 }
 
@@ -212,7 +247,7 @@ export function companionSwatchName(color: string): string {
 
 export function normalizeCompanion(value: unknown): CompanionAppearance {
   if (!value || typeof value !== "object") return { ...DEFAULT_COMPANION };
-  const raw = value as { shape?: unknown; color?: unknown };
+  const raw = value as { shape?: unknown; color?: unknown; mood?: unknown };
   const shape =
     typeof raw.shape === "number" &&
     SHAPE_OPTIONS.some((option) => option.shape === raw.shape)
@@ -222,7 +257,9 @@ export function normalizeCompanion(value: unknown): CompanionAppearance {
     typeof raw.color === "string" && isHexColor(raw.color)
       ? raw.color
       : DEFAULT_COMPANION.color;
-  return { shape, color };
+  const moods = ["idle", "happy", "thinking", "sleepy"] as const;
+  const mood = moods.find((item) => item === raw.mood);
+  return { shape, color, ...(mood ? { mood } : {}) };
 }
 
 export function newCharacterSeed(id: string, occupied: readonly string[]) {

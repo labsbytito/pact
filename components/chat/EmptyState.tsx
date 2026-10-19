@@ -1,3 +1,4 @@
+import { FileText } from "lucide-react";
 import { PactBlob } from "../companion/PactBlob";
 import type { CompanionAppearance } from "../../lib/character";
 import type { BlobState } from "../../lib/pact-blob";
@@ -46,7 +47,7 @@ export function EmptyState({
           <span className="tile-label">{foConnected ? "Fo" : "Connect"}</span>
         </button>
         <button className="tool-tile" type="button" onClick={onRead}>
-          <span className="tile-face">{pageMark || <PageMark />}<i className={pageConnected ? "dot on" : "dot"} /></span>
+          <span className="tile-face">{pageMark || <FileText size={16} strokeWidth={1.75} aria-hidden="true" />}<i className={pageConnected ? "dot on" : "dot"} /></span>
           <span className="tile-label">{pageConnected ? "Page" : "Connect"}</span>
         </button>
       </div>
@@ -54,10 +55,3 @@ export function EmptyState({
   );
 }
 
-function PageMark() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path fill="currentColor" d="M3.2 2.2h6.4L12.8 5.4v8.4H3.2V2.2Zm5.8 1.2v2.6h2.6V12.6H4.4V3.4h4.6Z" />
-    </svg>
-  );
-}

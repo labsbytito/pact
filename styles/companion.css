@@ -1,6 +1,7 @@
 .blob { display: inline-grid; place-items: center; }
 .blob svg { display: block; overflow: visible; }
 .blob-body { transform-origin: 50% 100%; transform-box: fill-box; }
+.blob-face { transform-origin: 36px 36px; transform-box: view-box; }
 .blob[data-motion="on"][data-state="idle"] .blob-body,
 .blob[data-motion="on"][data-state="greeting"] .blob-body,
 .blob[data-motion="on"][data-state="happy"] .blob-body {

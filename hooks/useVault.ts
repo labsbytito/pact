@@ -8,6 +8,7 @@ const empty: Settings = {
   theme: "system",
   accent: "pact",
   motion: "on",
+  background: "dusk",
   micDeviceId: "default",
   companion: DEFAULT_COMPANION,
 };
@@ -19,6 +20,7 @@ export function useVault() {
   const [ready, setReady] = useState(false);
   const pending = useRef<Pact[] | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chain = useRef(Promise.resolve());
   useEffect(() => {
     void (async () => {
       const [saved, prefs, storedActive] = await Promise.all([
@@ -45,7 +47,7 @@ export function useVault() {
     if (!pending.current) return;
     const snapshot = pending.current;
     pending.current = null;
-    void write("pact.pacts", snapshot);
+    chain.current = chain.current.catch(() => undefined).then(() => write("pact.pacts", snapshot));
   }, []);
   useEffect(() => () => flush(), [flush]);
   const savePact = useCallback((next: Pact) => {

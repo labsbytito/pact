@@ -23,9 +23,9 @@ Dark tokens stay the ones in `styles/tokens.css`.
 
 ## Radii and type
 
-Rows, menu items, and nav items are 6px. Settings cards, menus, and popovers are 10px. Message bubbles are 12px. Buttons and dropdown triggers are 8px. Avatar cards are 8px. A full pill (9999px) is only for the composer, the 24px context chips, and the 32×18 toggles. Nothing else goes above 12px. The send control is a 24px circle.
+Rows, menu items, and nav items are 6px. Settings cards, menus, and popovers are 10px. Message bubbles are 12px. Buttons are 8px. Avatar cards are 8px. A full pill (9999px) is for the name pill, the composer, the 24px context chips, compact dropdown triggers, mood chips, and the 32×18 toggles. Nothing else goes above 12px. The send control is a 24px circle.
 
-Settings at 420px and up use a left nav. Below 420px, settings is a list that opens a detail view with a back arrow. Settings rows are 44px. The settings title is 15px / 600. The empty-state companion is 72px. No headline is larger than 15px.
+Settings at 420px and up use a left nav with an icon on each item. Below 420px, settings is a list that opens a detail view with a back arrow. Settings rows are 48px. The settings title is 15px / 600. The empty-state companion is 72px. Companion shape previews are 40px. No headline is larger than 15px.
 
 ## Motion
 

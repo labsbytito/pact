@@ -108,6 +108,7 @@ export function useTurn(save: (pact: Pact) => void) {
             arguments: result.action.arguments,
             contextHash: result.action.contextHash,
             consequential: result.action.consequential,
+            explicit: result.action.explicit,
             requestId: uid(),
             status: "proposed",
           }
@@ -119,6 +120,7 @@ export function useTurn(save: (pact: Pact) => void) {
         action: action ?? (live.action?.status === "proposed" ? { ...live.action, status: "superseded" } : live.action),
         updatedAt: now(),
       });
+      if (pact.action?.explicit && pact.action.status === "proposed") void approve(pact);
       return pact;
     } catch (error) {
       if (error instanceof AbortInterpretError) {

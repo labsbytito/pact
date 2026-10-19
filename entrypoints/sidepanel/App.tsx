@@ -40,7 +40,7 @@ export default function App() {
   const voice = useDictation(settings.micDeviceId, turn.setDraft, turn.setNote);
   const watchRef = useRef(turn.watch);
   watchRef.current = turn.watch;
-  useTheme(settings.theme, settings.accent, settings.companion?.color, settings.motion);
+  useTheme(settings.theme, settings.accent, settings.companion?.color, settings.motion, settings.background);
   useEffect(() => {
     const media = window.matchMedia("(min-width: 420px)");
     const apply = () => setWide(media.matches);
@@ -72,7 +72,8 @@ export default function App() {
   const status = active?.action?.status;
   const thinking = companionThinking({ reading, streaming: turn.streaming, status });
   const typing = Boolean(turn.draft.trim()) && !turn.streaming && !reading;
-  const state: BlobState = link.kind === "offline" ? "sleepy" : thinking ? "thinking" : typing ? "listening" : blob;
+  const resting = blob === "idle" ? settings.companion?.mood ?? "idle" : blob;
+  const state: BlobState = link.kind === "offline" ? "sleepy" : thinking ? "thinking" : typing ? "listening" : resting;
   const line = liveLine({ reading, streaming: turn.streaming, status, hasPage: Boolean(pageTitle(page) || source) });
   async function connect() {
     try {
@@ -127,9 +128,9 @@ export default function App() {
           ) : !ready && view !== "settings" ? (
             <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : view === "settings" ? (
-            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} demo={!!health?.demo} onRefresh={() => void refresh()} onDeleted={() => void deleted()} />
+            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} demo={!!health?.demo} onRefresh={() => void refresh()} onDeleted={() => void deleted()} onAsk={(text) => { setView("home"); void turn.send(active, source ?? active?.source, text, (created) => setActiveId(created.id)); }} />
           ) : view === "list" ? (
-            <PactList pacts={pacts.filter((item) => !item.archived)} onOpen={(id) => { setActiveId(id); setView("home"); }} />
+            <PactList pacts={pacts.filter((item) => !item.archived)} appearance={settings.companion} onOpen={(id) => { setActiveId(id); setView("home"); }} />
           ) : !active ? (
             <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(pageTitle(page) || source)} pageMark={page?.host?.slice(0, 1).toUpperCase()} onConnect={() => void connect()} onRead={() => void readPage()} onAsk={turn.setDraft} />
           ) : (

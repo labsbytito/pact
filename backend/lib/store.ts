@@ -78,8 +78,15 @@ export function fileStore(path = storePath()): Store {
   };
 }
 
+type RedisEnv = {
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
+  KV_REST_API_URL?: string;
+  KV_REST_API_TOKEN?: string;
+};
+
 /** Upstash's own names, or the Vercel Marketplace integration's KV names. */
-export function redisRestFrom(env: NodeJS.ProcessEnv): { url: string; token: string } | null {
+export function redisRestFrom(env: RedisEnv): { url: string; token: string } | null {
   const upstashUrl = env.UPSTASH_REDIS_REST_URL;
   const upstashToken = env.UPSTASH_REDIS_REST_TOKEN;
   if (upstashUrl && upstashToken) return { url: upstashUrl, token: upstashToken };
@@ -90,7 +97,7 @@ export function redisRestFrom(env: NodeJS.ProcessEnv): { url: string; token: str
 }
 
 export function redisRestEnv() {
-  return redisRestFrom(process.env);
+  return redisRestFrom(process.env as RedisEnv);
 }
 
 export function redisStore(): Store {

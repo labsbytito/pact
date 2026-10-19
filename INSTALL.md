@@ -1,6 +1,6 @@
 # Install Pact
 
-This is an early build. It needs Fo early access. Pact asks you to connect Fo in Settings before a request is sent. You do not install Fo separately.
+This is an early build. It needs Fo early access. Connect Fo in Settings before a live request can be sent. You do not install Fo separately.
 
 You need Chrome and the unzipped Pact folder.
 

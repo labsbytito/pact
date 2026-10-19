@@ -35,6 +35,9 @@ export const pollRun = (id: string) => api<RunBody>(`/api/actions/${id}`);
 
 export const cancelPlan = (planId: string) => api<{ cancelled: boolean }>("/api/actions/cancel", { planId });
 
+export const loadFoStatus = () =>
+  api<{ fo: HealthBody["fo"]; demo?: boolean; tools: { name: string; description?: string }[] }>("/api/fo/status");
+
 export const connectFo = () => api<{ connected?: boolean; url?: string }>("/api/fo/connect", {});
 
 export const disconnectFo = () => api<{ disconnected: boolean }>("/api/fo/disconnect", {});

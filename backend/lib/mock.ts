@@ -1,3 +1,4 @@
+import { userAskedToAct } from "./intent";
 import { PACT_STREAM_DELIM } from "./stream-parse";
 
 const RESEARCH =
@@ -7,15 +8,28 @@ const ACCESS =
   "Find the official accessibility planning page for this place. Reply with the URL and one sentence on what it covers. Do not contact anyone, book anything, or spend money.";
 
 export function mockProposal(latest: string) {
+  const explicit = userAskedToAct(latest);
+  if (explicit) {
+    const message = latest.trim();
+    return {
+      reply: "I’ll ask Fo to do that now.",
+      title: "Ask Fo",
+      action: {
+        title: "Ask Fo",
+        instruction: message,
+        toolName: "ask_fo",
+        arguments: { message },
+      },
+    };
+  }
   const access = /accessib/i.test(latest);
   const message = access ? ACCESS : RESEARCH;
-  const title = access ? "Accessibility page" : "Visit research";
   const reply = access
-    ? "I’ll ask Fo for the official accessibility page, in the same conversation."
+    ? "I’ll ask Fo for the official accessibility page. That waits until you approve."
     : "I’ll ask Fo for the official visiting details. Nothing is sent until you approve.";
   return {
     reply,
-    title,
+    title: access ? "Accessibility page" : "Visit research",
     action: {
       title: access ? "Ask Fo for the accessibility page" : "Ask Fo for visiting information",
       instruction: message,

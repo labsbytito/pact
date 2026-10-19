@@ -191,6 +191,7 @@ export type Interpretation = {
     expiresAt?: string;
     contextHash?: string;
     consequential?: boolean;
+    explicit?: boolean;
   };
 };
 

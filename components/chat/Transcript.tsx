@@ -60,7 +60,13 @@ export function Transcript({
       </Thread>
       {action?.status === "needs_answer" && action.result && <p className="meta">{action.result}</p>}
       {action?.status === "needs_answer" && <p className="meta">Reply below and Fo will continue this conversation.</p>}
-      {action?.status === "proposed" && (
+      {action?.explicit && action.status !== "superseded" && (
+        <section className="card request" aria-label="Sent to Fo">
+          <h3>Sent to Fo</h3>
+          <pre className="mono">{typeof action.arguments?.message === "string" ? action.arguments.message : action.instruction}</pre>
+        </section>
+      )}
+      {action?.status === "proposed" && !action.explicit && (
         <ProposedRequest action={action} busy={busy} signedOut={signedOut} onApprove={() => onApprove(active)} onCancel={() => onCancel(active)} onConnect={onConnect} />
       )}
       {(active.actions ?? []).filter((item) => settled.has(item.status)).map((item) => (

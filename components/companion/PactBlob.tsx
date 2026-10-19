@@ -69,12 +69,14 @@ export function PactBlob({
     <span ref={ref} className="blob" data-state={state} data-motion={mode} data-live={live ? "on" : "off"} style={{ width: size, height: size }} aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
       <svg viewBox="0 0 72 72" width={size} height={size}>
         <g className="blob-body">
+          <g className="blob-face" style={{ transform: `rotate(${character.tilt}deg)` }}>
           <path d={character.path} fill={character.color} />
-          <g className="look" style={{ transform: `translate(${look.x}px, ${look.y}px)` }}>
+          <g className="look" style={{ transform: `translate(${look.x + (character.eye.lookX * size) / 72}px, ${look.y + (character.eye.lookY * size) / 72}px)` }}>
             <g className="eye" style={{ transform: `scaleY(${1 - closed})` }}>
               <rect x={eye.cx - eye.gap / 2 - eye.width} y={eye.cy - eye.height / 2} width={eye.width} height={eye.height} rx={eye.width / 2} fill="#1a1a1a" />
               <rect x={eye.cx + eye.gap / 2} y={eye.cy - eye.height / 2} width={eye.width} height={eye.height} rx={eye.width / 2} fill="#1a1a1a" />
             </g>
+          </g>
           </g>
         </g>
       </svg>

@@ -1,3 +1,4 @@
+import { ArrowUp, Mic, Plus, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export function Composer({
@@ -41,7 +42,9 @@ export function Composer({
           if (!streaming) onSend();
         }}
       >
-        <button className="icon-btn composer-tool plus" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>+</button>
+        <button className="icon-btn composer-tool plus" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
         <textarea
           ref={box}
           rows={1}
@@ -57,15 +60,15 @@ export function Composer({
           }}
         />
         <button className="icon-btn composer-tool mic" type="button" aria-label="Dictate" onClick={onDictate}>
-          <MicIcon />
+          <Mic size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
         {streaming ? (
           <button className="send stop" type="button" aria-label="Stop" onClick={onStop}>
-            <span style={{ width: 8, height: 8, background: "currentColor", display: "block" }} />
+            <Square size={10} fill="currentColor" strokeWidth={0} aria-hidden="true" />
           </button>
         ) : (
           <button className="send" type="submit" aria-label="Send" disabled={!value.trim()}>
-            <ArrowIcon />
+            <ArrowUp size={14} strokeWidth={2} aria-hidden="true" />
           </button>
         )}
       </form>
@@ -73,19 +76,3 @@ export function Composer({
   );
 }
 
-function MicIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path fill="currentColor" d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Z" />
-      <path fill="currentColor" d="M4 7.2a.6.6 0 0 0-1.2 0A5.2 5.2 0 0 0 7.4 12.3V14H6a.6.6 0 0 0 0 1.2h4a.6.6 0 0 0 0-1.2H8.6v-1.7A5.2 5.2 0 0 0 13.2 7.2a.6.6 0 0 0-1.2 0 4 4 0 0 1-8 0Z" />
-    </svg>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-      <path fill="currentColor" d="M6 1.4 10.2 6.1 9.3 7 6.7 4.2v6.4H5.3V4.2L2.7 7 1.8 6.1 6 1.4Z" />
-    </svg>
-  );
-}

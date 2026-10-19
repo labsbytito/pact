@@ -17,6 +17,7 @@ import {
 } from "./ai";
 import { aiMocked } from "./env";
 import { decideTool, consequentialToolsEnabled } from "./fo-policy";
+import { userAskedToAct } from "./intent";
 import { jsonSystemPrompt, streamSystemPrompt } from "./interpret-prompt";
 import { mockRaw } from "./mock";
 import { sourceSchema } from "./source";
@@ -150,12 +151,15 @@ export async function finalizeProposal(
     parsed.action.instruction = parsed.action.arguments.message;
   const contextHash = createHash("sha256").update(JSON.stringify(pact)).digest("hex");
   const consequential = decideTool(parsed.action.toolName, consequentialEnabled) === "confirm";
+  const latest = [...pact.messages].reverse().find((item) => item.role === "user")?.text ?? "";
+  const explicit = userAskedToAct(latest);
   const plan = await actions.propose({ ...parsed.action, pactId: pact.id, contextHash });
   return {
     ...parsed,
     action: {
       ...parsed.action,
       ...(consequential ? { consequential: true } : {}),
+      ...(explicit ? { explicit: true } : {}),
       planId: plan.planId,
       expiresAt: new Date(plan.expires).toISOString(),
       contextHash,

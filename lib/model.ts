@@ -1,4 +1,4 @@
-import { newCharacterSeed } from "./character";
+import { newCharacterSeed, type CompanionAppearance } from "./character";
 export type Source = {
   title: string;
   url: string;
@@ -36,6 +36,8 @@ export type Action = {
   arguments?: Record<string, unknown>;
   contextHash?: string;
   consequential?: boolean;
+  /** The user asked for this action. It runs without a second approval card. */
+  explicit?: boolean;
   /** Stable for the life of this proposal, including a retry after a lost response. */
   requestId?: string;
   status:
@@ -76,14 +78,16 @@ export type PactSection = {
 export type ThemePreference = "system" | "light" | "dark";
 export type AccentPreference = "pact" | "blue" | "teal" | "violet" | "black" | "character";
 export type MotionPreference = "on" | "reduced" | "off";
+export type BackgroundPreference = "dusk" | "ocean" | "sunrise" | "plain";
 export type Settings = {
   onboarded: boolean;
   theme?: ThemePreference;
   accent?: AccentPreference;
   motion?: MotionPreference;
+  background?: BackgroundPreference;
   /** Selected microphone device id, or "default". */
   micDeviceId?: string;
-  companion?: { shape: number; color: string };
+  companion?: CompanionAppearance;
 };
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
