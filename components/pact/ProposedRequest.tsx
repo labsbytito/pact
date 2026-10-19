@@ -1,4 +1,5 @@
 import type { Action } from "../../lib/model";
+import { visibleRequest } from "../../lib/request-text";
 import { ApproveButton } from "./ApproveButton";
 
 export function ProposedRequest({
@@ -16,7 +17,8 @@ export function ProposedRequest({
   onCancel: () => void;
   onConnect?: () => void;
 }) {
-  const message = typeof action.arguments?.message === "string" ? action.arguments.message : action.instruction;
+  const raw = typeof action.arguments?.message === "string" ? action.arguments.message : action.instruction;
+  const message = visibleRequest(raw);
   return (
     <section className="card request" aria-label="Request to Fo">
       <h3>Request to Fo</h3>

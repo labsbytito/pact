@@ -42,7 +42,7 @@ export async function* askClaudeStream(
         model: process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL,
         max_tokens: 1800,
         stream: true,
-        thinking: { type: "disabled" },
+        thinking: { type: "between_tools" },
         system,
         messages: [{ role: "user", content: messageContent }],
       }),

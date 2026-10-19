@@ -44,6 +44,7 @@ test("provider failures become specific actionable messages with sensible status
     ["Claude AI usage limit reached", undefined, /usage limit/, 429],
     ["model: claude-x not_found_error", 404, /model isn’t available/, 503],
     ["overloaded_error", 529, /overloaded/, 503],
+    ["invalid_request_error thinking.type must be between_tools", 400, /couldn’t accept that request/, 502],
     ["something odd", 400, /didn't get a reply/, 502],
   ];
   for (const [text, status, pattern, code] of cases) {

@@ -27,6 +27,8 @@ test("mock short and detailed replies differ, and a waiting card never says now"
   const short = mockProposal(ask, { responseStyle: "short", askBefore: "always" });
   const detailed = mockProposal(ask, { responseStyle: "detailed", askBefore: "always" });
   const fallback = mockProposal(ask, { askBefore: "always" });
+  assert.match(short.reply, /visiting information/);
+  assert.match(short.action.title, /visiting information/);
   assert.match(short.reply, /Approve below when you’re ready/);
   assert.doesNotMatch(short.reply, /do that now|ask Fo to do that now/);
   assert.equal(short.reply.includes("\n"), false);

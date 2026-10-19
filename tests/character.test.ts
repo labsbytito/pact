@@ -72,6 +72,15 @@ test("shapes and palette meet the floor", () => {
   }
   const eyes = brandCharacter(DEFAULT_COMPANION).eye;
   assert.ok(eyes.width >= 8 && eyes.height >= 20);
+  for (const option of SHAPE_OPTIONS) {
+    const eye = brandCharacter({ shape: option.shape, color: "#F59E0B" }).eye;
+    assert.equal(eye.width, eyes.width, option.name);
+    assert.equal(eye.height, eyes.height, option.name);
+    assert.equal(eye.lookX, 0, option.name);
+    assert.equal(eye.lookY, 0, option.name);
+    assert.ok(eye.cx >= 46 && eye.cx <= 54, option.name);
+    assert.ok(eye.cy >= 44 && eye.cy <= 62, option.name);
+  }
 });
 
 test("eye geometry stays inside the viewBox", () => {

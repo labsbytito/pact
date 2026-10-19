@@ -88,20 +88,20 @@ export const SHAPES: readonly string[] = [
 
 type Face = { tilt: number; cx: number; cy: number; gap: number; rotate: number; lookX: number; lookY: number };
 
-/** Eyes sit just above centre. Lean follows the shape. */
+/** Same eye size on every shape, centred on that shape’s body. */
 export const FACES: readonly Face[] = [
   { tilt: 0, cx: 50, cy: 46, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 1 },
-  { tilt: -12, cx: 44, cy: 46, gap: 14, rotate: -8, lookX: -1, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 50, gap: 18, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 40, gap: 12, rotate: 0, lookX: 0, lookY: -1 },
-  { tilt: -6, cx: 46, cy: 56, gap: 13, rotate: -4, lookX: -1, lookY: 1 },
-  { tilt: 2, cx: 54, cy: 50, gap: 14, rotate: 2, lookX: 1, lookY: 0 },
-  { tilt: -12, cx: 46, cy: 48, gap: 13, rotate: -8, lookX: -1, lookY: 0 },
-  { tilt: -8, cx: 44, cy: 48, gap: 12, rotate: -6, lookX: -1, lookY: 0 },
-  { tilt: 4, cx: 52, cy: 50, gap: 14, rotate: 3, lookX: 1, lookY: 1 },
-  { tilt: 0, cx: 50, cy: 48, gap: 12, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 46, gap: 15, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: -12, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 50, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 46, gap: 12, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 52, cy: 60, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 52, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: -12, cx: 50, cy: 46, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: -8, cx: 48, cy: 50, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 52, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 50, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 46, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
 ];
 
 /** Previous shape ids: circle, triangle, square, pill, cloud, heart, star, drop, bean, ghost, hexagon, flower. */

@@ -114,6 +114,11 @@ export function classifyAiFailure(text: string, httpStatus?: number) {
       "Claude’s account has no available credit. Add credit or switch provider. Your Pact is saved.",
       402,
     );
+  if (httpStatus === 400 && /invalid_request_error/.test(t))
+    return new AiError(
+      "Claude couldn’t accept that request. Try again. Your Pact is saved.",
+      502,
+    );
   if (httpStatus === 401 || /invalid api key|\/login|not logged in|authentication|unauthorized/.test(t))
     return new AiError(
       "Claude isn’t signed in, so Pact can’t reply yet. Your Pact is saved.",
@@ -281,7 +286,7 @@ export async function askClaude(
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL,
         max_tokens: 1800,
-        thinking: { type: "disabled" },
+        thinking: { type: "between_tools" },
         system,
         messages: [{ role: "user", content: messageContent }],
       }),

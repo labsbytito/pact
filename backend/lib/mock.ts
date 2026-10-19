@@ -14,8 +14,7 @@ export type MockOptions = {
 
 function subjectFor(latest: string) {
   if (/accessib/i.test(latest)) return "the official accessibility page";
-  if (/hour|open|visit/i.test(latest)) return "the opening hours";
-  return "the official visiting details";
+  return "visiting information";
 }
 
 function mockReply(latest: string, waiting: boolean, style?: "short" | "detailed") {
