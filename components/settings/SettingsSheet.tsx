@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { Info, Link2, Settings as SettingsIcon, Smile, type LucideIcon } from "lucide-react";
 import { COLOR_SWATCHES, SHAPE_OPTIONS, type CompanionAppearance, type CompanionMood } from "../../lib/character";
-import type { AccentPreference, BackgroundPreference, MotionPreference, Settings, ThemePreference } from "../../lib/model";
+import type { AccentPreference, AskBefore, BackgroundPreference, MotionPreference, ResponseStyle, Settings, TextSize, ThemePreference } from "../../lib/model";
 import { listMicrophones, openMicPermissionPage, openMicSiteSettings, queryMicPermission, type MicPermission } from "../../lib/mic";
 import { PactBlob } from "../companion/PactBlob";
-import { ArrowLeftIcon, ChevronIcon, CloseIcon } from "../icons";
 import { Connections } from "./Connections";
 import { MenuSelect } from "./MenuSelect";
 
@@ -14,12 +13,11 @@ const pages = [
   { id: "Companion", icon: Smile },
   { id: "About", icon: Info },
 ] as const;
-type Page = (typeof pages)[number]["id"];
+export type SettingsPage = (typeof pages)[number]["id"];
 
 const accents: { id: AccentPreference; label: string }[] = [
-  { id: "pact", label: "Pact color" },
-  { id: "blue", label: "Blue" },
   { id: "teal", label: "Teal" },
+  { id: "blue", label: "Blue" },
   { id: "violet", label: "Violet" },
   { id: "black", label: "Black" },
 ];
@@ -38,80 +36,53 @@ function navIcon(Icon: LucideIcon) {
 export function SettingsSheet({
   settings,
   onChange,
-  onClose,
   fo,
-  wide,
+  navWide,
+  page,
+  onPage,
   onRefresh,
   onDeleted,
-  onAsk,
   demo,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
-  onClose: () => void;
   fo?: string;
-  wide: boolean;
+  navWide: boolean;
+  page: SettingsPage;
+  onPage: (page: SettingsPage) => void;
   onRefresh?: () => void;
   onDeleted?: () => void;
-  onAsk?: (text: string) => void;
   demo?: boolean;
 }) {
-  const [page, setPage] = useState<Page | null>(wide ? "General" : null);
-  useEffect(() => { if (wide && !page) setPage("General"); }, [wide, page]);
   useEffect(() => {
     if (page !== "Connections" || !onRefresh) return;
     const timer = window.setInterval(onRefresh, 3000);
     return () => window.clearInterval(timer);
   }, [page, onRefresh]);
-  const companion = settings.companion ?? { shape: 0, color: COLOR_SWATCHES[0]!.color };
+  const companion = settings.companion ?? { shape: 0, color: "#F59E0B", v: 2 as const };
   return (
-    <div className="settings">
-      {wide && (
-        <nav aria-label="Settings">
-          {pages.map((item) => (
-            <button key={item.id} type="button" aria-current={page === item.id ? "page" : undefined} onClick={() => setPage(item.id)}>
-              {navIcon(item.icon)}
-              {item.id}
-            </button>
-          ))}
-        </nav>
-      )}
-      <div className="settings-body">
-        {wide && (
-          <button className="icon-btn settings-close" type="button" aria-label="Close settings" onClick={onClose}>
-            <CloseIcon />
+    <div className={navWide ? "settings wide" : "settings"}>
+      <nav aria-label="Settings">
+        {pages.map((item) => (
+          <button key={item.id} type="button" aria-current={page === item.id ? "page" : undefined} onClick={() => onPage(item.id)}>
+            {navIcon(item.icon)}
+            {item.id}
           </button>
-        )}
-        {!wide && !page && (
-          <>
-            <button className="icon-btn" type="button" aria-label="Close settings" onClick={onClose}><ArrowLeftIcon /></button>
-            <h2>Settings</h2>
-            {pages.map((item) => (
-              <button key={item.id} className="stack-row" type="button" onClick={() => setPage(item.id)}>
-                <span className="stack-label">{navIcon(item.icon)}{item.id}</span>
-                <ChevronIcon />
-              </button>
-            ))}
-          </>
-        )}
-        {page && (
-          <>
-            {!wide && (
-              <button className="icon-btn" type="button" aria-label="Back" onClick={() => setPage(null)}><ArrowLeftIcon /></button>
-            )}
-            <h2>{page}</h2>
-            {page === "General" && <General settings={settings} onChange={onChange} />}
-            {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} onAsk={onAsk} />}
-            {page === "Companion" && <Companion companion={companion} onChange={onChange} />}
-            {page === "About" && <About demo={demo} />}
-          </>
-        )}
+        ))}
+      </nav>
+      <div className="settings-body">
+        <h2>{page}</h2>
+        {page === "General" && <General settings={settings} onChange={onChange} />}
+        {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} />}
+        {page === "Companion" && <Companion companion={companion} onChange={onChange} />}
+        {page === "About" && <About demo={demo} />}
       </div>
     </div>
   );
 }
 
 function General({ settings, onChange }: { settings: Settings; onChange: (patch: Partial<Settings>) => void }) {
+  const accent = settings.accent === "pact" || settings.accent === "character" || !settings.accent ? "teal" : settings.accent;
   return (
     <>
       <div className="group-label">Appearance</div>
@@ -121,7 +92,7 @@ function General({ settings, onChange }: { settings: Settings; onChange: (patch:
           { value: "light", label: "Light" },
           { value: "dark", label: "Dark" },
         ]} onChange={(value) => onChange({ theme: value as ThemePreference })} />
-        <MenuSelect label="Accent" value={settings.accent === "character" ? "pact" : settings.accent ?? "pact"} options={accents.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => onChange({ accent: value as AccentPreference })} />
+        <MenuSelect label="Accent" value={accent} options={accents.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => onChange({ accent: value as AccentPreference })} />
         <MenuSelect label="Background" value={settings.background ?? "dusk"} options={[
           { value: "dusk", label: "Dusk" },
           { value: "ocean", label: "Ocean" },
@@ -134,6 +105,25 @@ function General({ settings, onChange }: { settings: Settings; onChange: (patch:
           { value: "off", label: "Off" },
         ]} onChange={(value) => onChange({ motion: value as MotionPreference })} />
       </div>
+      <div className="group-label">Behavior</div>
+      <div className="group">
+        <MenuSelect label="Response style" value={settings.responseStyle ?? "detailed"} options={[
+          { value: "short", label: "Short" },
+          { value: "detailed", label: "Detailed" },
+        ]} onChange={(value) => onChange({ responseStyle: value as ResponseStyle })} />
+        <MenuSelect label="Ask before acting" value={settings.askBefore ?? "suggested"} options={[
+          { value: "suggested", label: "Only for things Pact suggests" },
+          { value: "always", label: "Always" },
+        ]} onChange={(value) => onChange({ askBefore: value as AskBefore })} />
+        <MenuSelect label="Send with Enter" value={settings.sendWithEnter === false ? "off" : "on"} options={[
+          { value: "on", label: "On" },
+          { value: "off", label: "Off" },
+        ]} onChange={(value) => onChange({ sendWithEnter: value !== "off" })} />
+        <MenuSelect label="Text size" value={settings.textSize ?? "default"} options={[
+          { value: "default", label: "Default" },
+          { value: "large", label: "Large" },
+        ]} onChange={(value) => onChange({ textSize: value as TextSize })} />
+      </div>
       <div className="group-label">System</div>
       <Microphone settings={settings} onChange={onChange} />
     </>
@@ -142,7 +132,7 @@ function General({ settings, onChange }: { settings: Settings; onChange: (patch:
 
 function Companion({ companion, onChange }: { companion: CompanionAppearance; onChange: (patch: Partial<Settings>) => void }) {
   const mood = companion.mood ?? "idle";
-  const patch = (next: Partial<CompanionAppearance>) => onChange({ companion: { ...companion, ...next } });
+  const patch = (next: Partial<CompanionAppearance>) => onChange({ companion: { ...companion, ...next, v: 2 } });
   return (
     <>
       <div className="group-label">Shape</div>
@@ -152,7 +142,7 @@ function Companion({ companion, onChange }: { companion: CompanionAppearance; on
             const selected = companion.shape === option.shape;
             return (
               <button key={option.shape} className="shape-btn" type="button" aria-pressed={selected} aria-label={option.name} title={option.name} onClick={() => patch({ shape: option.shape })}>
-                <PactBlob size={40} live={selected} state={selected ? mood : "still"} appearance={{ shape: option.shape, color: companion.color, mood }} />
+                <PactBlob size={40} live={selected} state={selected ? mood : "still"} appearance={{ shape: option.shape, color: companion.color, mood, v: 2 }} />
               </button>
             );
           })}
@@ -187,8 +177,13 @@ function Microphone({ settings, onChange }: { settings: Settings; onChange: (pat
       if (stop) return;
       setPerm(state);
       const list = await listMicrophones();
-      const seen = new Set<string>(["default"]);
-      if (!stop) setDevices(list.filter((item) => item.deviceId && !seen.has(item.deviceId) && seen.add(item.deviceId)));
+      const seen = new Set<string>();
+      if (!stop) setDevices(list.filter((item) => {
+        if (!item.deviceId || item.deviceId === "default" || /^default$/i.test(item.label)) return false;
+        if (seen.has(item.deviceId)) return false;
+        seen.add(item.deviceId);
+        return true;
+      }));
     };
     void queryMicPermission().then(load);
     const onMessage = (message: { type?: string }) => {
@@ -204,7 +199,7 @@ function Microphone({ settings, onChange }: { settings: Settings; onChange: (pat
     ...devices.map((device) => ({ value: device.deviceId, label: device.label || "Microphone" })),
   ];
   if (saved !== "default" && !options.some((item) => item.value === saved))
-    options.push({ value: saved, label: "Saved microphone" });
+    options.push({ value: saved, label: "Saved microphone (unavailable)" });
   return (
     <div className="group">
       <MenuSelect label="Microphone" value={saved} options={options} onChange={(value) => onChange({ micDeviceId: value })} />
@@ -213,6 +208,7 @@ function Microphone({ settings, onChange }: { settings: Settings; onChange: (pat
         <span className="conn-meta">{mic}</span>
         <button className="text-btn" type="button" onClick={() => void (perm === "denied" ? openMicSiteSettings() : openMicPermissionPage()).catch(() => setPerm("unknown"))}>Allow</button>
       </div>
+      <p className="conn-note">The side panel can't ask for the microphone. Allow opens a Pact page where Chrome can.</p>
     </div>
   );
 }

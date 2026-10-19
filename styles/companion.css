@@ -1,18 +1,19 @@
 .blob { display: inline-grid; place-items: center; }
 .blob svg { display: block; overflow: visible; }
 .blob-body { transform-origin: 50% 100%; transform-box: fill-box; }
-.blob-face { transform-origin: 36px 36px; transform-box: view-box; }
-.blob[data-motion="on"][data-state="idle"] .blob-body,
-.blob[data-motion="on"][data-state="greeting"] .blob-body,
-.blob[data-motion="on"][data-state="happy"] .blob-body {
-  animation: breathe 4.8s ease-in-out infinite;
-}
-.blob[data-motion="on"][data-state="thinking"] .blob-body,
-.blob[data-motion="on"][data-state="listening"] .blob-body { animation: breathe 6.4s ease-in-out infinite; }
-.blob[data-motion="on"][data-state="happy"] { animation: hop 720ms ease; }
-@keyframes hop {
+.blob-face { transform-origin: center; transform-box: view-box; }
+.blob[data-motion="on"][data-bob="idle"] .blob-body,
+.blob[data-motion="on"][data-bob="greeting"] .blob-body { animation: bob 3s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="happy"] .blob-body { animation: bob 2.1s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="thinking"] .blob-body { animation: sway 2.6s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="sleepy"] .blob-body { animation: breathe 5.5s ease-in-out infinite; }
+@keyframes bob {
   0%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-3px); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
 }
 .blob[data-motion="on"][data-state="speaking"] .blob-body { animation: speak 1.8s ease-in-out infinite; }
 .blob[data-motion="on"][data-state="sleepy"] .blob-body { animation: breathe 7s ease-in-out infinite; }
@@ -50,6 +51,12 @@
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+html[data-motion="off"] .blob-body,
+html[data-motion="off"] .dots i,
+html[data-motion="reduced"] .blob-body { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .blob-body, .live-dot, .msg, .dots i { animation: none !important; }
 }
 html[data-motion="reduced"] .glass,
 html[data-motion="off"] .glass {

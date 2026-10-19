@@ -42,9 +42,8 @@ a { color: var(--accent); }
 }
 .app::before {
   background:
-    radial-gradient(88% 46% at 74% 78%, var(--wash-glow) 0%, transparent 64%),
-    radial-gradient(72% 42% at 8% 0%, color-mix(in srgb, var(--wash-b) 80%, transparent) 0%, transparent 70%),
-    linear-gradient(180deg, var(--wash-a) 0%, var(--wash-b) 22%, color-mix(in srgb, var(--wash-b) 55%, var(--wash-c)) 46%, var(--wash-c) 68%, var(--wash-d) 100%);
+    radial-gradient(70% 42% at 92% 100%, var(--wash-glow) 0%, transparent 68%),
+    linear-gradient(180deg, var(--wash-a) 0%, color-mix(in srgb, var(--wash-a) 35%, var(--wash-d)) 28%, var(--wash-d) 55%, var(--wash-d) 100%);
 }
 .app::after {
   opacity: 0.02;
@@ -70,8 +69,8 @@ a { color: var(--accent); }
 .float-bar > * { pointer-events: auto; }
 .float-actions { display: flex; gap: 4px; }
 .float-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 9999px;
   background: transparent;
@@ -84,11 +83,12 @@ a { color: var(--accent); }
 .name-pill {
   position: absolute;
   left: 50%;
+  top: 0;
   transform: translateX(-50%);
-  height: 36px;
+  height: 32px;
   max-width: calc(100% - 88px);
-  padding: 0 12px 0 8px;
-  gap: 8px;
+  padding: 0 12px 0 6px;
+  gap: 6px;
   display: inline-flex;
   align-items: center;
   border-radius: 9999px;
@@ -96,7 +96,7 @@ a { color: var(--accent); }
 .name-pill h1 {
   margin: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -121,12 +121,13 @@ a { color: var(--accent); }
   display: flex;
   flex-direction: column;
   padding: 56px 16px 16px;
+  overflow-x: hidden;
   mask-image: linear-gradient(to bottom, transparent 0, #000 48px);
 }
-.app.with-composer .scroll { padding-bottom: 148px; }
+.app.with-composer .scroll { padding-bottom: 132px; }
 .pane { flex: 1 0 auto; display: flex; flex-direction: column; }
 .pane > .empty, .pane > .settings, .pane > .server { flex: 1; min-height: 0; }
-.dock { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 4; }
+.dock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4; }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .brand h1 { flex: 1; }
 .step-caption {

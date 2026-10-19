@@ -1,7 +1,10 @@
 import { useRef, useState } from "react";
-import { AbortInterpretError, interpretLive } from "../lib/api";
-import { approveRequest, cancelPlan, pollRun } from "../lib/backend";
+import { AbortInterpretError, interpretLive, type TurnPrefs } from "../lib/api";
+import { approveRequest, cancelPlan, loadRunByPlan, pollRun } from "../lib/backend";
 import { makePact, message, now, uid, type Action, type Pact, type Source } from "../lib/model";
+import { autoApprove } from "../lib/settings";
+
+export type TurnPrefsLive = TurnPrefs & { signedOut?: boolean };
 
 export function useTurn(save: (pact: Pact) => void) {
   const [draft, setDraft] = useState("");
@@ -12,6 +15,7 @@ export function useTurn(save: (pact: Pact) => void) {
   const pollRef = useRef<number | null>(null);
   const approving = useRef(false);
   const latest = useRef(new Map<string, Pact>());
+  const prefs = useRef<TurnPrefsLive>({});
   function remember(next: Pact) {
     latest.current.set(next.id, next);
     save(next);
@@ -29,23 +33,22 @@ export function useTurn(save: (pact: Pact) => void) {
         const run = await pollRun(runId);
         const base = latest.current.get(pact.id) ?? pact;
         const previous = base.action;
+        const owns =
+          previous?.runId === runId ||
+          ((previous?.status === "running" || previous?.status === "approved") && !previous.runId);
+        if (!owns) return;
         const action: Action = {
           ...(previous ?? (pact.action as Action)),
           status: run.status === "running" ? "running" : run.status,
-          result: run.result,
+          result: run.result || run.error,
           progress: run.progress,
           runId,
         };
-        const owns =
-          !previous?.runId ||
-          previous.runId === runId ||
-          previous.status === "running" ||
-          previous.status === "approved";
         const history = base.actions ?? [];
         remember({
           ...base,
           updatedAt: now(),
-          action: owns ? action : previous,
+          action,
           actions:
             run.status === "running"
               ? history
@@ -57,6 +60,33 @@ export function useTurn(save: (pact: Pact) => void) {
       }
     };
     pollRef.current = window.setTimeout(() => void tick(), 400);
+  }
+
+  async function recover(pact: Pact) {
+    const action = (latest.current.get(pact.id) ?? pact).action;
+    if (!action?.planId || action.runId) return;
+    if (action.status !== "approved" && action.status !== "running") return;
+    try {
+      const run = await loadRunByPlan(action.planId);
+      const base = latest.current.get(pact.id) ?? pact;
+      const current = base.action;
+      if (!run?.runId || !current || current.planId !== action.planId || current.runId) return;
+      if (current.status !== "approved" && current.status !== "running") return;
+      const next = remember({
+        ...base,
+        updatedAt: now(),
+        action: {
+          ...current,
+          status: run.status === "running" ? "running" : run.status,
+          runId: run.runId,
+          result: run.result || run.error,
+          progress: run.progress,
+        },
+      });
+      if (run.status === "running") watch(next, run.runId);
+    } catch {
+      /* No accepted run yet. Leave the request where it is. */
+    }
   }
 
   async function send(
@@ -85,6 +115,7 @@ export function useTurn(save: (pact: Pact) => void) {
         [],
         {
           signal: abort.signal,
+          prefs: { responseStyle: prefs.current.responseStyle, askBefore: prefs.current.askBefore },
           onDelta: (chunk) => {
             assistant.text += chunk;
             const live = latest.current.get(pact.id) ?? pact;
@@ -109,6 +140,7 @@ export function useTurn(save: (pact: Pact) => void) {
             contextHash: result.action.contextHash,
             consequential: result.action.consequential,
             explicit: result.action.explicit,
+            messageId: assistant.id,
             requestId: uid(),
             status: "proposed",
           }
@@ -120,7 +152,8 @@ export function useTurn(save: (pact: Pact) => void) {
         action: action ?? (live.action?.status === "proposed" ? { ...live.action, status: "superseded" } : live.action),
         updatedAt: now(),
       });
-      if (pact.action?.explicit && pact.action.status === "proposed") void approve(pact);
+      if (autoApprove(pact.action?.explicit, prefs.current.askBefore, Boolean(prefs.current.signedOut)))
+        void approve(pact);
       return pact;
     } catch (error) {
       if (error instanceof AbortInterpretError) {
@@ -141,11 +174,15 @@ export function useTurn(save: (pact: Pact) => void) {
   }
 
   async function approve(pact: Pact) {
+    if (prefs.current.signedOut) {
+      setNote("Connect Fo first");
+      return latest.current.get(pact.id) ?? pact;
+    }
     if (approving.current) return latest.current.get(pact.id) ?? pact;
     const current = latest.current.get(pact.id) ?? pact;
     const action = current.action;
     if (!action?.planId) return current;
-    const retry = action.status === "proposed" || (action.status === "approved" && Boolean(action.requestId));
+    const retry = action.status === "proposed" || action.status === "failed" || (action.status === "approved" && Boolean(action.requestId));
     if (!retry) return current;
     approving.current = true;
     setBusy(true);
@@ -161,15 +198,24 @@ export function useTurn(save: (pact: Pact) => void) {
       const live = latest.current.get(current.id) ?? current;
       const next = remember({
         ...live,
-        action: { ...live.action!, status: "running", runId: run.runId, requestId, progress: "Asking Fo…" },
+        action: { ...live.action!, status: "running", runId: run.runId, requestId, progress: "Waiting for Fo" },
         updatedAt: now(),
       });
       watch(next, run.runId);
       return next;
     } catch (error) {
       const live = latest.current.get(current.id) ?? current;
-      remember({ ...live, action: { ...live.action!, status: "proposed", requestId }, updatedAt: now() });
-      setNote(error instanceof Error ? error.message : "Fo did not accept that request.");
+      remember({
+        ...live,
+        action: {
+          ...live.action!,
+          status: "failed",
+          requestId,
+          result: error instanceof Error ? error.message : "Fo did not accept that request.",
+        },
+        updatedAt: now(),
+      });
+      setNote("");
       return latest.current.get(current.id) ?? current;
     } finally {
       approving.current = false;
@@ -187,5 +233,5 @@ export function useTurn(save: (pact: Pact) => void) {
 
   function stop() { abortRef.current?.abort(); }
 
-  return { draft, setDraft, streaming, busy, note, setNote, send, approve, cancel, stop, watch };
+  return { draft, setDraft, streaming, busy, note, setNote, send, approve, cancel, stop, watch, recover, prefs };
 }

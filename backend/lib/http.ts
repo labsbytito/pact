@@ -1,4 +1,4 @@
-import identity from "../../extension-identity.json" with { type: "json" };
+import identity from "../extension-identity.json" with { type: "json" };
 import { ZodError } from "zod";
 import { ActionError } from "./actions";
 import { AiError } from "./ai";

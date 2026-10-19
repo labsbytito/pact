@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_COMPANION, normalizeCompanion } from "../lib/character";
 import type { Pact, Settings } from "../lib/model";
+import { emptySettings, normalizeSettings } from "../lib/settings";
 import { read, write } from "../lib/storage";
 
-const empty: Settings = {
-  onboarded: true,
-  theme: "system",
-  accent: "pact",
-  motion: "on",
-  background: "dusk",
-  micDeviceId: "default",
-  companion: DEFAULT_COMPANION,
-};
+const empty = emptySettings;
 
 export function useVault() {
   const [pacts, setPacts] = useState<Pact[]>([]);
@@ -31,15 +23,23 @@ export function useVault() {
       const list = Array.isArray(saved) ? saved : [];
       setPacts(list);
       setActiveIdState(list.some((item) => item.id === storedActive) ? storedActive : null);
-      setSettings({
-        ...empty,
-        ...prefs,
-        accent: prefs.accent === "character" ? "pact" : prefs.accent ?? empty.accent,
-        motion: prefs.motion ?? "on",
-        companion: normalizeCompanion(prefs.companion ?? empty.companion),
-      });
+      setSettings(normalizeSettings(prefs));
       setReady(true);
     })();
+    const onChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string,
+    ) => {
+      if (area !== "local") return;
+      if (changes["pact.settings"]?.newValue)
+        setSettings(normalizeSettings(changes["pact.settings"].newValue as Settings));
+      if (changes["pact.pacts"]?.newValue && Array.isArray(changes["pact.pacts"].newValue) && !pending.current)
+        setPacts(changes["pact.pacts"].newValue as Pact[]);
+      if (changes["pact.activeId"])
+        setActiveIdState((changes["pact.activeId"].newValue as string | null) ?? null);
+    };
+    chrome.storage?.onChanged?.addListener(onChanged);
+    return () => chrome.storage?.onChanged?.removeListener(onChanged);
   }, []);
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);

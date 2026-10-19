@@ -14,12 +14,14 @@ export async function POST(req: Request) {
     const gate = await authed(req);
     if (isResponse(gate)) return gate;
     await limitInterpret(openStore(), gate.installId);
-    const { pact } = interpretInput.parse(await req.json());
-    release = holdPact(pact.id);
+    const body = interpretInput.parse(await req.json());
+    release = holdPact(body.pact.id);
     const result = await runInterpretation({
-      pact,
+      pact: body.pact,
       actions: gate.session.actions,
       tools: toolsFor(gate.session),
+      responseStyle: body.responseStyle,
+      askBefore: body.askBefore,
     });
     if ("stopped" in result && result.stopped) return json(req, { reply: result.reply });
     return json(req, result);

@@ -1,4 +1,4 @@
-/** Deterministic Pact companions — Grok Bot style flat shapes + dark pill eyes. */
+/** Deterministic Pact companions — twelve flat Grok-style silhouettes. */
 
 export type CharacterSize = "tiny" | "small" | "normal" | "hero" | "row";
 export type CharacterState =
@@ -42,86 +42,90 @@ export type CompanionAppearance = {
   shape: number;
   color: string;
   mood?: CompanionMood;
+  /** 2 marks a shape id from the current set. Missing means the previous set. */
+  v?: 2;
 };
 
 export const BRAND_SEED = "pact.brand";
 
-/** Grok Bot–adjacent saturated flat fills (no gradients). */
+/** Saturated flat fills. Purple and indigo are not in the set. */
 export const PALETTE = [
-  "#8B5CF6", // purple
-  "#F59E0B", // orange / gold
-  "#8B5E3C", // brown
-  "#EC4899", // pink
-  "#14B8A6", // teal
-  "#EF4444", // red
-  "#3B82F6", // blue
-  "#F5F5F5", // white
-  "#EAB308", // gold
-  "#A855F7", // violet
-  "#FB923C", // soft orange
-  "#0EA5E9", // sky
-  "#22C55E", // mint
-  "#6366F1", // indigo
-  "#FB7185", // coral
+  "#F59E0B",
+  "#8B5E3C",
+  "#EC4899",
+  "#14B8A6",
+  "#EF4444",
+  "#3B82F6",
+  "#F5F5F5",
+  "#EAB308",
+  "#FB923C",
+  "#0EA5E9",
+  "#22C55E",
+  "#FB7185",
 ] as const;
 
 /**
- * Flat silhouettes in a 72×72 viewBox.
- * 0 circle, 1 soft triangle, 2 tilted square, 3 pill, 4 cloud,
- * 5 heart, 6 soft star, 7 drop, 8 bean, 9 ghost, 10 soft hexagon, 11 flower.
+ * One solid silhouette each, viewBox 0 0 100 100.
+ * 0 circle, 1 rounded square, 2 rounded square (tilted −12°),
+ * 3 horizontal pill, 4 vertical capsule, 5 soft triangle,
+ * 6 cloud, 7 squircle (tilted +10°), 8 bean, 9 egg,
+ * 10 rounded diamond, 11 soft pentagon.
  */
 export const SHAPES: readonly string[] = [
-  "M36 8C51.464 8 64 20.536 64 36C64 51.464 51.464 64 36 64C20.536 64 8 51.464 8 36C8 20.536 20.536 8 36 8Z",
-  "M36 12C42 12 56 30 58 44C60 58 50 64 36 64C22 64 12 58 14 44C16 30 30 12 36 12Z",
-  "M24 16C34 8 50 10 56 20C62 30 58 46 50 54C42 62 24 60 16 50C8 40 10 24 24 16Z",
-  "M36 8C48 8 56 16 56 28V44C56 56 48 64 36 64C24 64 16 56 16 44V28C16 16 24 8 36 8Z",
-  "M22 40C16 34 18 24 28 22C30 14 42 12 48 18C56 14 66 22 62 32C68 36 66 48 56 50C58 60 46 66 36 60C28 66 16 60 18 50C10 48 8 36 16 32C16 32 18 36 22 40Z",
-  "M36 58C18 46 10 36 10 26C10 16 18 10 28 12C32 13 36 18 36 22C36 18 40 13 44 12C54 10 62 16 62 26C62 36 54 46 36 58Z",
-  "M36 8C38 24 48 28 64 30C48 34 40 42 36 64C32 42 24 34 8 30C24 28 34 24 36 8Z",
-  "M36 8C50 22 60 32 60 44C60 56 50 64 36 64C22 64 12 56 12 44C12 32 22 22 36 8Z",
-  "M28 16C40 10 54 16 58 28C62 40 54 54 42 58C30 62 16 52 16 40C16 28 18 22 28 16Z",
-  "M22 30C22 16 28 8 36 8C44 8 50 16 50 30V50C50 56 46 54 44 50C42 46 38 52 36 50C34 48 30 54 28 50C26 46 22 56 22 50V30Z",
-  "M36 10L54 20C58 24 60 28 60 34V46C60 52 56 56 50 58L36 64L22 58C16 56 12 52 12 46V34C12 28 14 24 18 20Z",
-  "M36 30C36 18 28 12 36 6C44 12 36 18 36 30C48 22 58 16 64 24C56 32 46 32 36 30C48 38 56 48 48 56C38 48 36 38 36 30C36 42 28 54 18 56C12 46 22 36 36 30C24 32 14 24 8 16C16 10 26 20 36 30Z",
+  "M50 12a38 38 0 1 0 0 76a38 38 0 1 0 0-76Z",
+  "M42 14h16a28 28 0 0 1 28 28v16a28 28 0 0 1-28 28H42a28 28 0 0 1-28-28V42a28 28 0 0 1 28-28Z",
+  "M42 14h16a28 28 0 0 1 28 28v16a28 28 0 0 1-28 28H42a28 28 0 0 1-28-28V42a28 28 0 0 1 28-28Z",
+  "M32 28h36a22 22 0 0 1 0 44H32a22 22 0 0 1 0-44Z",
+  "M28 32v36a22 22 0 0 0 44 0V32a22 22 0 0 0-44 0Z",
+  "M50 16C64 18 74 32 76 46C78 64 66 82 50 84C34 82 22 64 24 46C26 32 36 18 50 16Z",
+  "M28 62C16 60 14 48 24 44C18 34 32 24 44 32C50 18 68 20 72 34C84 26 96 38 90 50C100 60 88 72 74 68C62 78 38 76 28 62Z",
+  "M50 14C68 14 86 32 86 50C86 68 68 86 50 86C32 86 14 68 14 50C14 32 32 14 50 14Z",
+  "M36 22C54 14 76 24 78 42C80 62 64 80 46 82C30 84 16 70 20 54C22 44 34 42 42 50C48 56 44 66 34 60C24 54 22 40 28 32C30 26 32 24 36 22Z",
+  "M50 12C68 12 80 32 80 52C80 74 66 88 50 88C34 88 20 74 20 52C20 32 32 12 50 12Z",
+  "M50 14C58 14 66 22 74 34C84 48 84 52 74 66C66 78 58 86 50 86C42 86 34 78 26 66C16 52 16 48 26 34C34 22 42 14 50 14Z",
+  "M50 14C62 14 74 22 80 34C88 48 86 62 76 74C66 84 54 88 50 88C46 88 34 84 24 74C14 62 12 48 20 34C26 22 38 14 50 14Z",
 ];
 
 type Face = { tilt: number; cx: number; cy: number; gap: number; rotate: number; lookX: number; lookY: number };
 
-/** Stable personality per shape: a lean, and where the eyes sit. */
+/** Eyes sit just above centre. Lean follows the shape. */
 export const FACES: readonly Face[] = [
-  { tilt: 0, cx: 36, cy: 34, gap: 11, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: -6, cx: 36, cy: 40, gap: 10, rotate: -4, lookX: -1, lookY: 1 },
-  { tilt: 10, cx: 34, cy: 36, gap: 10, rotate: 8, lookX: 1, lookY: 0 },
-  { tilt: 0, cx: 36, cy: 32, gap: 9, rotate: 0, lookX: 0, lookY: -1 },
-  { tilt: -4, cx: 38, cy: 36, gap: 12, rotate: -3, lookX: 1, lookY: 0 },
-  { tilt: 0, cx: 36, cy: 32, gap: 10, rotate: 0, lookX: 0, lookY: 1 },
-  { tilt: 4, cx: 36, cy: 34, gap: 8, rotate: 6, lookX: 0, lookY: -1 },
-  { tilt: 0, cx: 36, cy: 40, gap: 10, rotate: 0, lookX: 0, lookY: 1 },
-  { tilt: -8, cx: 34, cy: 36, gap: 9, rotate: -6, lookX: -1, lookY: 0 },
-  { tilt: 0, cx: 36, cy: 32, gap: 11, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 3, cx: 36, cy: 36, gap: 10, rotate: 2, lookX: 1, lookY: 0 },
-  { tilt: -3, cx: 36, cy: 34, gap: 8, rotate: -2, lookX: 0, lookY: -1 },
+  { tilt: 0, cx: 50, cy: 44, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 44, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: -12, cx: 46, cy: 44, gap: 14, rotate: -8, lookX: -1, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 42, gap: 12, rotate: 0, lookX: 0, lookY: -1 },
+  { tilt: -4, cx: 48, cy: 50, gap: 13, rotate: -4, lookX: -1, lookY: 1 },
+  { tilt: -3, cx: 52, cy: 46, gap: 14, rotate: -3, lookX: 1, lookY: 0 },
+  { tilt: 10, cx: 54, cy: 44, gap: 14, rotate: 8, lookX: 1, lookY: 0 },
+  { tilt: -8, cx: 46, cy: 48, gap: 12, rotate: -6, lookX: -1, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 46, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 48, gap: 12, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 2, cx: 50, cy: 46, gap: 14, rotate: 2, lookX: 0, lookY: 0 },
 ];
+
+/** Previous shape ids: circle, triangle, square, pill, cloud, heart, star, drop, bean, ghost, hexagon, flower. */
+const LEGACY_SHAPE = [0, 5, 2, 4, 6, 0, 0, 0, 8, 0, 0, 0];
+
+const RETIRED_COLORS = new Set(["#8B5CF6", "#A78BFA", "#A855F7", "#6366F1", "#818CF8"]);
 
 export const SHAPE_OPTIONS = [
   { shape: 0, name: "Circle" },
-  { shape: 1, name: "Triangle" },
-  { shape: 2, name: "Square" },
+  { shape: 1, name: "Square" },
+  { shape: 2, name: "Tilted square" },
   { shape: 3, name: "Pill" },
-  { shape: 4, name: "Cloud" },
-  { shape: 5, name: "Heart" },
-  { shape: 6, name: "Star" },
-  { shape: 7, name: "Drop" },
+  { shape: 4, name: "Capsule" },
+  { shape: 5, name: "Triangle" },
+  { shape: 6, name: "Cloud" },
+  { shape: 7, name: "Squircle" },
   { shape: 8, name: "Bean" },
-  { shape: 9, name: "Ghost" },
-  { shape: 10, name: "Hexagon" },
-  { shape: 11, name: "Flower" },
+  { shape: 9, name: "Egg" },
+  { shape: 10, name: "Diamond" },
+  { shape: 11, name: "Pentagon" },
 ] as const;
 
-/** Grok Bot palette swatches for the editor. */
 export const COLOR_SWATCHES = [
-  { name: "Purple", color: "#8B5CF6", dark: "#A78BFA" },
-  { name: "Orange", color: "#F59E0B", dark: "#FBBF24" },
+  { name: "Amber", color: "#F59E0B", dark: "#FBBF24" },
   { name: "Brown", color: "#8B5E3C", dark: "#A67C52" },
   { name: "Pink", color: "#EC4899", dark: "#F472B6" },
   { name: "Teal", color: "#14B8A6", dark: "#2DD4BF" },
@@ -130,17 +134,15 @@ export const COLOR_SWATCHES = [
   { name: "White", color: "#F5F5F5", dark: "#E5E5E5" },
   { name: "Gold", color: "#EAB308", dark: "#FACC15" },
   { name: "Mint", color: "#22C55E", dark: "#4ADE80" },
-  { name: "Indigo", color: "#6366F1", dark: "#818CF8" },
   { name: "Coral", color: "#FB7185", dark: "#FDA4AF" },
 ] as const;
 
 export const DEFAULT_COMPANION: CompanionAppearance = {
   shape: 0,
-  color: COLOR_SWATCHES[0]!.color,
+  color: "#F59E0B",
 };
 
-/** Dark vertical pill eyes — no white sclera. */
-export const EYE_FILL = "#1A1A1A";
+export const EYE_FILL = "#111111";
 
 function hash(seed: string): number {
   let h = 2166136261;
@@ -163,23 +165,20 @@ function isHexColor(value: string): boolean {
   return /^#[0-9A-Fa-f]{6}$/.test(value);
 }
 
-/** Pure: same seed → same character, forever. Always dark vertical pills. */
 export function characterFor(seed?: string): Character {
   const key = seed && seed.trim() ? seed.trim() : BRAND_SEED;
   const h = hash(key);
   const shape = h % SHAPES.length;
   const color = pick(PALETTE, (h >>> 8) % PALETTE.length);
   const tilt = (mix(h, 2) % 17) - 8;
-  // Eyes slightly off-center so the face “looks” somewhere
-  const cx = 32 + (mix(h, 3) % 9);
-  const cy = 30 + (mix(h, 4) % 7);
+  const cx = 36 + (mix(h, 3) % 24);
+  const cy = 34 + (mix(h, 4) % 16);
   const rotate = (mix(h, 5) % 17) - 8;
   const lookX = (mix(h, 6) % 5) - 2;
   const lookY = (mix(h, 7) % 5) - 2;
-  const gap = 9 + (mix(h, 8) % 4);
-  // Vertical pills: narrow width, taller height
-  const width = 3.2 + (mix(h, 9) % 12) / 10;
-  const height = 9.5 + (mix(h, 10) % 25) / 10;
+  const gap = 12 + (mix(h, 8) % 4);
+  const width = 6.2 + (mix(h, 9) % 10) / 10;
+  const height = 15 + (mix(h, 10) % 30) / 10;
 
   return {
     seed: key,
@@ -218,8 +217,8 @@ export function brandCharacter(
     tilt: face.tilt,
     eye: {
       kind: "pill",
-      width: 4,
-      height: 11,
+      width: 7,
+      height: 18,
       gap: face.gap,
       cx: face.cx,
       cy: face.cy,
@@ -231,35 +230,41 @@ export function brandCharacter(
 }
 
 export function companionColorForScheme(color: string, dark = false): string {
+  const migrated = migrateColor(color);
   const swatch = COLOR_SWATCHES.find(
-    (item) => item.color === color || item.dark === color,
+    (item) => item.color === migrated || item.dark === migrated,
   );
   if (swatch) return dark ? swatch.dark : swatch.color;
-  return isHexColor(color) ? color : DEFAULT_COMPANION.color;
+  return isHexColor(migrated) ? migrated : DEFAULT_COMPANION.color;
 }
 
 export function companionSwatchName(color: string): string {
+  const migrated = migrateColor(color);
   const swatch = COLOR_SWATCHES.find(
-    (item) => item.color === color || item.dark === color,
+    (item) => item.color === migrated || item.dark === migrated,
   );
   return swatch?.name ?? "Custom";
 }
 
+function migrateColor(color: string): string {
+  return RETIRED_COLORS.has(color.toUpperCase()) ? DEFAULT_COMPANION.color : color;
+}
+
 export function normalizeCompanion(value: unknown): CompanionAppearance {
   if (!value || typeof value !== "object") return { ...DEFAULT_COMPANION };
-  const raw = value as { shape?: unknown; color?: unknown; mood?: unknown };
-  const shape =
-    typeof raw.shape === "number" &&
-    SHAPE_OPTIONS.some((option) => option.shape === raw.shape)
-      ? raw.shape
-      : DEFAULT_COMPANION.shape;
+  const raw = value as { shape?: unknown; color?: unknown; mood?: unknown; v?: unknown };
+  let shape = DEFAULT_COMPANION.shape;
+  if (typeof raw.shape === "number" && Number.isInteger(raw.shape)) {
+    if (raw.v === 2 && SHAPE_OPTIONS.some((option) => option.shape === raw.shape)) shape = raw.shape;
+    else if (raw.shape >= 0 && raw.shape < LEGACY_SHAPE.length) shape = LEGACY_SHAPE[raw.shape]!;
+  }
   const color =
     typeof raw.color === "string" && isHexColor(raw.color)
-      ? raw.color
+      ? migrateColor(raw.color)
       : DEFAULT_COMPANION.color;
   const moods = ["idle", "happy", "thinking", "sleepy"] as const;
   const mood = moods.find((item) => item === raw.mood);
-  return { shape, color, ...(mood ? { mood } : {}) };
+  return { shape, color, v: 2, ...(mood ? { mood } : {}) };
 }
 
 export function newCharacterSeed(id: string, occupied: readonly string[]) {

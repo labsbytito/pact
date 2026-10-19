@@ -2,7 +2,7 @@
 
 A little intention. A real next step.
 
-Pact is a Chrome side panel. Read a page when you choose and talk it through. When you ask Pact to do something, it sends that to Fo and shows the request and the result in the thread. A step Pact suggests on its own waits until you approve it.
+Pact is a Chrome side panel. Read a page when you choose and talk it through. A research or connect request in your own words can go to Fo directly. Booking, sending, and anything Pact suggests on its own wait until you approve.
 
 ![Pact in the dark, with the dusk wash and the companion](docs/screens/dark-480-empty.png)
 

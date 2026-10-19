@@ -38,6 +38,8 @@ export type Action = {
   consequential?: boolean;
   /** The user asked for this action. It runs without a second approval card. */
   explicit?: boolean;
+  /** Assistant message this action belongs to. */
+  messageId?: string;
   /** Stable for the life of this proposal, including a retry after a lost response. */
   requestId?: string;
   status:
@@ -79,6 +81,9 @@ export type ThemePreference = "system" | "light" | "dark";
 export type AccentPreference = "pact" | "blue" | "teal" | "violet" | "black" | "character";
 export type MotionPreference = "on" | "reduced" | "off";
 export type BackgroundPreference = "dusk" | "ocean" | "sunrise" | "plain";
+export type ResponseStyle = "short" | "detailed";
+export type AskBefore = "suggested" | "always";
+export type TextSize = "default" | "large";
 export type Settings = {
   onboarded: boolean;
   theme?: ThemePreference;
@@ -88,6 +93,10 @@ export type Settings = {
   /** Selected microphone device id, or "default". */
   micDeviceId?: string;
   companion?: CompanionAppearance;
+  responseStyle?: ResponseStyle;
+  askBefore?: AskBefore;
+  sendWithEnter?: boolean;
+  textSize?: TextSize;
 };
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();

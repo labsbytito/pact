@@ -33,6 +33,8 @@ export const approveRequest = (body: {
 
 export const pollRun = (id: string) => api<RunBody>(`/api/actions/${id}`);
 
+export const loadRunByPlan = (planId: string) => api<RunBody>(`/api/actions/by-plan/${encodeURIComponent(planId)}`);
+
 export const cancelPlan = (planId: string) => api<{ cancelled: boolean }>("/api/actions/cancel", { planId });
 
 export const loadFoStatus = () =>

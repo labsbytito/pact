@@ -9,6 +9,7 @@ export function Composer({
   streaming,
   onRead,
   onDictate,
+  sendWithEnter = true,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -17,6 +18,7 @@ export function Composer({
   streaming: boolean;
   onRead: () => void;
   onDictate: () => void;
+  sendWithEnter?: boolean;
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const [menu, setMenu] = useState(false);
@@ -26,7 +28,7 @@ export function Composer({
     el.style.height = "0px";
     const next = Math.min(el.scrollHeight, 126);
     el.style.height = `${next}px`;
-    el.form?.toggleAttribute("data-multiline", next > 36);
+    el.form?.toggleAttribute("data-multiline", next > 56);
   }, [value]);
   return (
     <div className="composer-wrap">
@@ -53,9 +55,14 @@ export function Composer({
           aria-label="Message Pact"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            const command = event.metaKey || event.ctrlKey;
+            if (event.key !== "Enter" || event.shiftKey || streaming) return;
+            if (sendWithEnter && !command) {
               event.preventDefault();
-              if (!streaming) onSend();
+              onSend();
+            } else if (!sendWithEnter && command) {
+              event.preventDefault();
+              onSend();
             }
           }}
         />

@@ -17,7 +17,7 @@ import {
 } from "./ai";
 import { aiMocked } from "./env";
 import { decideTool, consequentialToolsEnabled } from "./fo-policy";
-import { userAskedToAct } from "./intent";
+import { guardMessage, qualifiesForBypass } from "./intent";
 import { jsonSystemPrompt, streamSystemPrompt } from "./interpret-prompt";
 import { mockRaw } from "./mock";
 import { sourceSchema } from "./source";
@@ -32,6 +32,8 @@ const attachmentSchema = z.object({
 });
 
 export const interpretInput = z.object({
+  responseStyle: z.enum(["short", "detailed"]).optional(),
+  askBefore: z.enum(["suggested", "always"]).optional(),
   pact: z.object({
     id: z.string().uuid().optional(),
     intention: z.string().min(1).max(8000),
@@ -110,6 +112,7 @@ export async function finalizeProposal(
   available: Tool[],
   foQuestion: unknown,
   actions: ActionStore,
+  askBefore?: "suggested" | "always",
 ) {
   const record = model && typeof model === "object" ? (model as Record<string, unknown>) : {};
   const checked = proposal.safeParse(model);
@@ -147,12 +150,24 @@ export async function finalizeProposal(
   else if (withheld)
     parsed.reply += "\n\n(I couldn’t prepare that action safely, so nothing was proposed.)";
   if (!parsed.action) return parsed;
-  if (parsed.action.toolName === "ask_fo" && typeof parsed.action.arguments.message === "string")
-    parsed.action.instruction = parsed.action.arguments.message;
-  const contextHash = createHash("sha256").update(JSON.stringify(pact)).digest("hex");
-  const consequential = decideTool(parsed.action.toolName, consequentialEnabled) === "confirm";
   const latest = [...pact.messages].reverse().find((item) => item.role === "user")?.text ?? "";
-  const explicit = userAskedToAct(latest);
+  const consequential = decideTool(parsed.action.toolName, consequentialEnabled) === "confirm";
+  const rawMessage = typeof parsed.action.arguments.message === "string" ? parsed.action.arguments.message : "";
+  const explicit =
+    parsed.action.toolName === "ask_fo" &&
+    qualifiesForBypass({
+      latest,
+      toolName: parsed.action.toolName,
+      message: rawMessage,
+      consequential,
+      askBefore,
+    });
+  if (parsed.action.toolName === "ask_fo") {
+    const guarded = guardMessage(explicit ? latest : rawMessage);
+    parsed.action.arguments = { ...parsed.action.arguments, message: guarded };
+    parsed.action.instruction = guarded;
+  }
+  const contextHash = createHash("sha256").update(JSON.stringify(pact)).digest("hex");
   const plan = await actions.propose({ ...parsed.action, pactId: pact.id, contextHash });
   return {
     ...parsed,
@@ -196,6 +211,8 @@ export async function runInterpretation(options: {
   tools: Tool[];
   signal?: AbortSignal;
   onDelta?: (text: string) => void;
+  responseStyle?: "short" | "detailed";
+  askBefore?: "suggested" | "always";
 }) {
   if (!aiMocked() && !aiReady())
     throw new AiError("Replies are unavailable right now. Your Pact is saved.", 503);
@@ -203,8 +220,8 @@ export async function runInterpretation(options: {
   const latest = options.pact.messages.filter((item) => item.role === "user").at(-1)?.text ?? options.pact.intention;
   const packed = payload(options.pact, options.actions, options.tools);
   if (!options.onDelta && !aiMocked() && !canStream()) {
-    const raw = await askClaude(jsonSystemPrompt(packed.available, packed.foQuestion), packed.content, packed.images);
-    return finalizeProposal(options.pact, parseModelReply(raw), packed.available, packed.foQuestion, options.actions);
+    const raw = await askClaude(jsonSystemPrompt(packed.available, packed.foQuestion, options.responseStyle), packed.content, packed.images);
+    return finalizeProposal(options.pact, parseModelReply(raw), packed.available, packed.foQuestion, options.actions, options.askBefore);
   }
   const abort = new AbortController();
   options.signal?.addEventListener("abort", () => abort.abort(), { once: true });
@@ -212,7 +229,7 @@ export async function runInterpretation(options: {
   let emitted = 0;
   let stopped = false;
   for await (const chunk of chunks(
-    streamSystemPrompt(packed.available, packed.foQuestion),
+    streamSystemPrompt(packed.available, packed.foQuestion, options.responseStyle),
     packed.content,
     packed.images,
     abort.signal,
@@ -238,6 +255,7 @@ export async function runInterpretation(options: {
     packed.available,
     packed.foQuestion,
     options.actions,
+    options.askBefore,
   );
   return { stopped: false as const, ...done };
 }

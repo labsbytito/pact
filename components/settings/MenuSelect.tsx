@@ -13,6 +13,7 @@ export function MenuSelect({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [drop, setDrop] = useState<"down" | "up">("down");
   const root = useRef<HTMLDivElement>(null);
   const current = options.find((item) => item.value === value)?.label ?? value;
   useEffect(() => {
@@ -26,12 +27,17 @@ export function MenuSelect({
   return (
     <div className="menu-select" ref={root}>
       <span>{label}</span>
-      <button className="menu-trigger" type="button" aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen((value) => !value)}>
+      <button className="menu-trigger" type="button" aria-expanded={open} aria-haspopup="listbox" onClick={() => {
+        const box = root.current?.getBoundingClientRect();
+        const space = window.innerHeight - (box?.bottom ?? 0);
+        setDrop(space < 180 ? "up" : "down");
+        setOpen((value) => !value);
+      }}>
         <span>{current}</span>
         <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
       </button>
       {open && (
-        <div className="menu pop glass" role="listbox" aria-label={label}>
+        <div className={`menu pop glass ${drop}`} role="listbox" aria-label={label}>
           {options.map((item) => (
             <button key={item.value} type="button" role="option" aria-selected={item.value === value} onClick={() => { onChange(item.value); setOpen(false); }}>
               {item.label}

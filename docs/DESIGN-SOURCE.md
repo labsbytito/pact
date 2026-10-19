@@ -13,23 +13,23 @@ When these disagree, use them in this order:
 Taken from `grokbot-chat-light.png` and the Grok teardown:
 
 - Canvas `#fcfcfc`, surfaces `#efefef` and `#ffffff`, selected `#e4e4e4`.
-- Text `#1c1c1c` / `#646464` / `#8d8d8d`.
-- Assistant bubbles `#efefef`. User bubbles `#1c1c1c` with white text.
+- Text `#1a1a1a` / `#5c5c5c` / `#737373`. Dark muted text `#8a8a8a`.
+- Light assistant bubbles `#ffffff` with a `#e5e5e5` hairline. Light user bubbles `#e6e6e6`. Dark assistant bubbles are a 6% white fill. Dark user bubbles `#2a2a2a`.
 - Dark selected `#242424`. Dark hairline `#292929`.
 - Areas separate by tone. No divider lines.
-- Composer stays a pill. The send control stays a 24px circle so its radius stays at 12px. It is inverse with an up arrow when there is text, and muted when empty.
+- Composer stays a pill until it wraps past two lines, then the radius is 16px. Send is a 28px circle: white with a `#111` arrow in dark, `#111` with a white arrow in light. It does not use the accent.
 
 Dark tokens stay the ones in `styles/tokens.css`.
 
 ## Radii and type
 
-Rows, menu items, and nav items are 6px. Settings cards, menus, and popovers are 10px. Message bubbles are 12px. Buttons are 8px. Avatar cards are 8px. A full pill (9999px) is for the name pill, the composer, the 24px context chips, compact dropdown triggers, mood chips, and the 32×18 toggles. Nothing else goes above 12px. The send control is a 24px circle.
+Rows, menu items, and nav items are 6px. Settings cards, menus, and popovers are 10px. Message bubbles are 12px. Buttons and select triggers are 8px. Circles are for 28px icon buttons, swatches, Send, and avatars. A full pill is for chips, mood chips, the status pill, the name pill, the composer, and toggles. Nothing else goes above 12px.
 
-Settings at 420px and up use a left nav with an icon on each item. Below 420px, settings is a list that opens a detail view with a back arrow. Settings rows are 48px. The settings title is 15px / 600. The empty-state companion is 72px. Companion shape previews are 40px. No headline is larger than 15px.
+Settings nav is a frosted surface. Below 480px it becomes a horizontal pill row. The settings screen has one back control in the top bar and no close button. Settings rows are 48px. The empty-state companion is 72px. The name-pill companion is 20px. Companion shape previews are 40px. No headline is larger than 15px.
 
 ## Motion
 
-Calm, like Grok Bot. The companion does not follow the pointer. Blinks and breathing stay slow. Every animation respects `prefers-reduced-motion`. Nothing jumps or bounces.
+Calm, like Grok Bot. The 72px companion follows the pointer a little. Smaller copies stay still. Calm blinks slowly and bobs. Happy eyes are arcs. Thinking glances aside. Sleepy eyes are half closed and do not follow. Animations Off and `prefers-reduced-motion` stop the motion.
 
 ## Voice
 

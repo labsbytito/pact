@@ -195,14 +195,20 @@ export type Interpretation = {
   };
 };
 
+export type TurnPrefs = {
+  responseStyle?: "short" | "detailed";
+  askBefore?: "suggested" | "always";
+};
+
 export const interpret = (
   pact: Pact,
   attachments: readonly Attachment[] = [],
   signal?: AbortSignal,
+  prefs?: TurnPrefs,
 ) =>
   api<Interpretation>(
     "/api/interpret",
-    interpretationContext(pact, attachments),
+    interpretationContext(pact, attachments, prefs),
     signal,
   );
 
@@ -211,7 +217,15 @@ export type StreamHandlers = {
   signal?: AbortSignal;
   /** Prefer streaming when true (Anthropic API). Default: try stream then fall back. */
   preferStream?: boolean;
+  prefs?: TurnPrefs;
 };
+
+function paintFrame() {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else resolve();
+  });
+}
 
 function shouldFallbackFromStream(res: Response): boolean {
   if ([404, 405, 501].includes(res.status)) return true;
@@ -251,6 +265,7 @@ async function readStream(
         if (e.type === "delta" && e.text) {
           partial += e.text;
           handlers.onDelta?.(e.text);
+          await paintFrame();
         } else if (e.type === "stopped") {
           throw new AbortInterpretError(
             e.reply ?? partial,
@@ -297,8 +312,9 @@ export async function interpretLive(
   pact: Pact,
   attachments: readonly Attachment[] = [],
   handlers: StreamHandlers = {},
+  retry = true,
 ): Promise<Interpretation> {
-  const body = interpretationContext(pact, attachments);
+  const body = interpretationContext(pact, attachments, handlers.prefs);
   const timeout = AbortSignal.timeout(95000);
   const signal = combineAbortSignals(handlers.signal, timeout);
   const preferStream = handlers.preferStream !== false;
@@ -321,11 +337,16 @@ export async function interpretLive(
         throw new AbortInterpretError("", true);
       if (e instanceof TypeError) throw offlineError();
       // Network quirk — try non-stream path.
-      return interpret(pact, attachments, handlers.signal);
+      return interpret(pact, attachments, handlers.signal, handlers.prefs);
+    }
+
+    if (res.status === 401 && retry) {
+      await ensureToken(true);
+      return interpretLive(pact, attachments, handlers, false);
     }
 
     if (shouldFallbackFromStream(res)) {
-      return interpret(pact, attachments, handlers.signal);
+      return interpret(pact, attachments, handlers.signal, handlers.prefs);
     }
 
     if (!res.ok) {
@@ -336,7 +357,7 @@ export async function interpretLive(
 
     const type = res.headers.get("content-type") ?? "";
     if (!type.includes("text/event-stream")) {
-      return interpret(pact, attachments, handlers.signal);
+      return interpret(pact, attachments, handlers.signal, handlers.prefs);
     }
 
     try {
@@ -347,9 +368,9 @@ export async function interpretLive(
       if ((e as Error)?.name === "AbortError")
         throw new AbortInterpretError("", true);
       // Corrupt SSE → non-stream fallback once.
-      return interpret(pact, attachments, handlers.signal);
+      return interpret(pact, attachments, handlers.signal, handlers.prefs);
     }
   }
 
-  return interpret(pact, attachments, handlers.signal);
+  return interpret(pact, attachments, handlers.signal, handlers.prefs);
 }

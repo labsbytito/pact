@@ -7,6 +7,7 @@ import {
 export function interpretationContext(
   pact: Pact,
   attachments: readonly Attachment[] = [],
+  prefs?: { responseStyle?: "short" | "detailed"; askBefore?: "suggested" | "always" },
 ) {
   let source: Source | undefined;
   if (pact.source) {
@@ -46,6 +47,8 @@ export function interpretationContext(
   }
   const wired = wireAttachments(attachments).slice(0, 3);
   const payload = {
+    responseStyle: prefs?.responseStyle === "short" ? "short" as const : "detailed" as const,
+    askBefore: prefs?.askBefore === "always" ? "always" as const : "suggested" as const,
     pact: {
       id: pact.id,
       intention: pact.intention.slice(0, 8000),

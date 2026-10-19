@@ -24,12 +24,10 @@ export function Connections({
   fo,
   onRefresh,
   onDeleted,
-  onAsk,
 }: {
   fo?: string;
   onRefresh?: () => void;
   onDeleted?: () => void;
-  onAsk?: (text: string) => void;
 }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
@@ -68,13 +66,17 @@ export function Connections({
     }
   }
 
-  async function connectService(id: string, ask: string) {
+  function serviceConnected(pattern: RegExp) {
+    return tools.some((tool) => pattern.test(tool.name) && !INTERNAL.has(tool.name));
+  }
+
+  async function connectService(id: string, name: string) {
     await run(id, async () => {
       if (!signedIn) {
         await connectAccount();
         return;
       }
-      onAsk?.(ask);
+      setNote(`${name} stays not connected. Nothing was sent.`);
     });
   }
 
@@ -111,18 +113,18 @@ export function Connections({
         <ServiceRow
           icon={glyph(Mail)}
           name="Gmail"
-          status="Not connected"
+          status={serviceConnected(/gmail|google.?mail/i) ? "Connected" : "Not connected"}
           action="Connect"
           disabled={busy === "gmail"}
-          onAction={() => void connectService("gmail", "Connect my Gmail")}
+          onAction={() => void connectService("gmail", "Gmail")}
         />
         <ServiceRow
           icon={glyph(Calendar)}
           name="Google Calendar"
-          status="Not connected"
+          status={serviceConnected(/calendar/i) ? "Connected" : "Not connected"}
           action="Connect"
           disabled={busy === "calendar"}
-          onAction={() => void connectService("calendar", "Connect my Google Calendar")}
+          onAction={() => void connectService("calendar", "Google Calendar")}
         />
         {extras.map((tool) => (
           <ServiceRow
@@ -132,7 +134,7 @@ export function Connections({
             status="Not connected"
             action="Connect"
             disabled={busy === tool.name}
-            onAction={() => void connectService(tool.name, `Connect ${labelFor(tool.name)}`)}
+            onAction={() => void connectService(tool.name, labelFor(tool.name))}
           />
         ))}
       </div>
@@ -178,7 +180,8 @@ function ServiceRow({
 }) {
   return (
     <div className="set-row conn">
-      <span className="conn-name">{icon}<span>{name}</span></span>
+      <span className="conn-icon">{icon}</span>
+      <span className="conn-name">{name}</span>
       <span className="conn-meta">{status}</span>
       <button className="text-btn" type="button" disabled={disabled} onClick={onAction}>{action}</button>
     </div>

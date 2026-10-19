@@ -106,10 +106,22 @@ test("normalizeCompanion rejects invalid shape and color", () => {
   assert.deepEqual(normalizeCompanion({ shape: 99, color: "red" }), {
     shape: DEFAULT_COMPANION.shape,
     color: DEFAULT_COMPANION.color,
+    v: 2,
   });
   assert.deepEqual(normalizeCompanion({ shape: 4, color: "#EF4444" }), {
-    shape: 4,
+    shape: 6,
     color: "#EF4444",
+    v: 2,
+  });
+  assert.deepEqual(normalizeCompanion({ shape: 5, color: "#8B5CF6" }), {
+    shape: 0,
+    color: "#F59E0B",
+    v: 2,
+  });
+  assert.deepEqual(normalizeCompanion({ shape: 1, color: "#EF4444", v: 2 }), {
+    shape: 1,
+    color: "#EF4444",
+    v: 2,
   });
 });
 

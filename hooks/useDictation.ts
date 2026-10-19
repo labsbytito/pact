@@ -43,11 +43,22 @@ export function useDictation(
       }
       return;
     }
+    const chosen = deviceId && deviceId !== "default" ? deviceId : undefined;
     try {
-      await probeMicrophone(deviceId);
+      await probeMicrophone(chosen);
     } catch {
-      setNote("Microphone isn’t available yet. Allow it once, then try dictation again.");
-      return;
+      if (chosen) {
+        try {
+          await probeMicrophone("default");
+          setNote("That microphone is gone. Dictation is using the system default.");
+        } catch {
+          setNote("Microphone isn’t available yet. Allow it once, then try dictation again.");
+          return;
+        }
+      } else {
+        setNote("Microphone isn’t available yet. Allow it once, then try dictation again.");
+        return;
+      }
     }
     const Speech = (window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec }).SpeechRecognition
       ?? (window as unknown as { webkitSpeechRecognition?: new () => Rec }).webkitSpeechRecognition;

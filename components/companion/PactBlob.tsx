@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { brandCharacter, characterFor, type CompanionAppearance } from "../../lib/character";
+import { brandCharacter, characterFor, type CompanionAppearance, type CompanionMood } from "../../lib/character";
 import { prefersReducedMotion, type BlobState } from "../../lib/pact-blob";
+
+function faceFor(state: BlobState, mood: CompanionMood): CompanionMood | "greeting" {
+  if (state === "still" || state === "error") return "idle";
+  if (state === "thinking" || state === "listening") return "thinking";
+  if (state === "sleepy") return "sleepy";
+  if (state === "happy") return "happy";
+  if (state === "greeting") return "greeting";
+  return mood;
+}
 
 export function PactBlob({
   state = "idle",
@@ -15,26 +24,27 @@ export function PactBlob({
   seed?: string;
   appearance?: CompanionAppearance;
   label?: string;
-  /** Only the active companion idles. Every other copy stays still. */
   live?: boolean;
 }) {
   const character = appearance ? brandCharacter(appearance, document.documentElement.dataset.theme === "dark") : characterFor(seed);
+  const mood = appearance?.mood ?? "idle";
+  const face = faceFor(state, mood);
   const [lid, setLid] = useState(0);
   const [look, setLook] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLSpanElement>(null);
   const setting = typeof document !== "undefined" ? document.documentElement.dataset.motion : "on";
   const motion = live && setting !== "off" && !prefersReducedMotion();
-  const follow = live && size >= 72 && setting === "on" && !prefersReducedMotion();
+  const follow = motion && size >= 72 && setting === "on" && face !== "sleepy";
   const mode = !motion ? "off" : setting === "reduced" ? "reduced" : "on";
   useEffect(() => {
-    if (!motion || state === "sleepy") return;
+    if (!motion) return;
     let timer = 0;
     const blink = () => {
       setLid(1);
-      timer = window.setTimeout(() => setLid(0), 90);
+      timer = window.setTimeout(() => setLid(0), face === "sleepy" ? 140 : 90);
     };
     const loop = () => {
-      const wait = 2800 + Math.random() * 3200;
+      const wait = face === "happy" ? 900 + Math.random() * 800 : face === "sleepy" ? 5200 + Math.random() * 2400 : 3200 + Math.random() * 2600;
       timer = window.setTimeout(() => {
         blink();
         loop();
@@ -42,7 +52,7 @@ export function PactBlob({
     };
     loop();
     return () => window.clearTimeout(timer);
-  }, [motion, state]);
+  }, [motion, face]);
   useEffect(() => {
     if (!follow) {
       setLook({ x: 0, y: 0 });
@@ -64,19 +74,31 @@ export function PactBlob({
     return () => window.removeEventListener("pointermove", onMove);
   }, [follow]);
   const eye = character.eye;
-  const closed = state === "sleepy" ? 0.85 : lid;
+  const closed = face === "sleepy" ? 0.55 : lid;
+  const height = face === "sleepy" ? eye.height * 0.42 : eye.height;
+  const glance = face === "thinking" ? { x: size * 0.08, y: -size * 0.1 } : { x: 0, y: 0 };
+  const left = eye.cx - eye.gap / 2 - eye.width;
+  const right = eye.cx + eye.gap / 2;
+  const bob = face === "greeting" ? "idle" : face;
   return (
-    <span ref={ref} className="blob" data-state={state} data-motion={mode} data-live={live ? "on" : "off"} style={{ width: size, height: size }} aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
-      <svg viewBox="0 0 72 72" width={size} height={size}>
+    <span ref={ref} className="blob" data-state={state} data-bob={bob} data-motion={mode} data-live={live ? "on" : "off"} style={{ width: size, height: size }} aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
+      <svg viewBox="0 0 100 100" width={size} height={size}>
         <g className="blob-body">
           <g className="blob-face" style={{ transform: `rotate(${character.tilt}deg)` }}>
-          <path d={character.path} fill={character.color} />
-          <g className="look" style={{ transform: `translate(${look.x + (character.eye.lookX * size) / 72}px, ${look.y + (character.eye.lookY * size) / 72}px)` }}>
-            <g className="eye" style={{ transform: `scaleY(${1 - closed})` }}>
-              <rect x={eye.cx - eye.gap / 2 - eye.width} y={eye.cy - eye.height / 2} width={eye.width} height={eye.height} rx={eye.width / 2} fill="#1a1a1a" />
-              <rect x={eye.cx + eye.gap / 2} y={eye.cy - eye.height / 2} width={eye.width} height={eye.height} rx={eye.width / 2} fill="#1a1a1a" />
+            <path d={character.path} fill={character.color} />
+            <g className="look" style={{ transform: `translate(${look.x + glance.x + (character.eye.lookX * size) / 100}px, ${look.y + glance.y + (character.eye.lookY * size) / 100}px)` }}>
+              {face === "happy" ? (
+                <g fill="none" stroke="#111" strokeOpacity={0.9} strokeWidth={3.4} strokeLinecap="round">
+                  <path d={`M${left} ${eye.cy} q ${eye.width / 2} -9 ${eye.width} 0`} />
+                  <path d={`M${right} ${eye.cy} q ${eye.width / 2} -9 ${eye.width} 0`} />
+                </g>
+              ) : (
+                <g className="eye" style={{ transform: `scaleY(${Math.max(0.15, 1 - closed)})` }}>
+                  <rect x={left} y={eye.cy - height / 2} width={eye.width} height={height} rx={eye.width / 2} fill="#111" fillOpacity={0.9} />
+                  <rect x={right} y={eye.cy - height / 2} width={eye.width} height={height} rx={eye.width / 2} fill="#111" fillOpacity={0.9} />
+                </g>
+              )}
             </g>
-          </g>
           </g>
         </g>
       </svg>

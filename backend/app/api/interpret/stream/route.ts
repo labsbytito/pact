@@ -6,6 +6,7 @@ import { openStore } from "../../../../lib/store";
 import { toolsFor } from "../../../../lib/runtime";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
@@ -14,8 +15,8 @@ export async function POST(req: Request) {
     const gate = await authed(req);
     if (isResponse(gate)) return gate;
     await limitInterpret(openStore(), gate.installId);
-    const { pact } = interpretInput.parse(await req.json());
-    release = holdPact(pact.id);
+    const body = interpretInput.parse(await req.json());
+    release = holdPact(body.pact.id);
     const encoder = new TextEncoder();
     const abort = new AbortController();
     const stream = new ReadableStream({
@@ -25,10 +26,12 @@ export async function POST(req: Request) {
         };
         try {
           const result = await runInterpretation({
-            pact,
+            pact: body.pact,
             actions: gate.session.actions,
             tools: toolsFor(gate.session),
             signal: abort.signal,
+            responseStyle: body.responseStyle,
+            askBefore: body.askBefore,
             onDelta: (text) => send({ type: "delta", text }),
           });
           if ("stopped" in result && result.stopped) send({ type: "stopped", reply: result.reply });
@@ -50,6 +53,8 @@ export async function POST(req: Request) {
     const headers = new Headers(json(req, {}).headers);
     headers.set("Content-Type", "text/event-stream; charset=utf-8");
     headers.set("Cache-Control", "no-cache, no-transform");
+    headers.set("X-Accel-Buffering", "no");
+    headers.set("Content-Encoding", "none");
     return new Response(stream, { headers });
   } catch (error) {
     release();

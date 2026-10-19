@@ -5,8 +5,7 @@ import { LivePill } from "../../components/chat/LivePill";
 import { Transcript } from "../../components/chat/Transcript";
 import { PactList } from "../../components/library/PactList";
 import { PactHeader } from "../../components/pact/PactHeader";
-import { SourceChip } from "../../components/pact/SourceChip";
-import { SettingsSheet } from "../../components/settings/SettingsSheet";
+import { SettingsSheet, type SettingsPage } from "../../components/settings/SettingsSheet";
 import { ServerState } from "../../components/system/ServerState";
 import { useDictation } from "../../hooks/useDictation";
 import { useHealth } from "../../hooks/useHealth";
@@ -16,7 +15,7 @@ import { useVault } from "../../hooks/useVault";
 import { clearInstallToken } from "../../lib/api";
 import { connectFo } from "../../lib/backend";
 import { capturePage } from "../../lib/capture";
-import type { Pact, Source } from "../../lib/model";
+import type { Source } from "../../lib/model";
 import type { BlobState } from "../../lib/pact-blob";
 import { shouldGreet } from "../../lib/pact-blob";
 import { currentPageLabel } from "../../lib/page-label";
@@ -29,7 +28,8 @@ export default function App() {
   const turn = useTurn(savePact);
   const [source, setSource] = useState<Source | undefined>();
   const [view, setView] = useState<"home" | "list" | "settings">("home");
-  const [wide, setWide] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("General");
+  const [navWide, setNavWide] = useState(false);
   const [blob, setBlob] = useState<BlobState>("idle");
   const [reading, setReading] = useState(false);
   const [page, setPage] = useState<PageLabel>();
@@ -37,13 +37,21 @@ export default function App() {
   const active = pacts.find((item) => item.id === activeId) ?? null;
   const ready = link.kind === "ok" || link.kind === "fo";
   const health = ready ? link.health : undefined;
+  const signedOut = link.kind === "fo";
   const voice = useDictation(settings.micDeviceId, turn.setDraft, turn.setNote);
   const watchRef = useRef(turn.watch);
+  const recoverRef = useRef(turn.recover);
   watchRef.current = turn.watch;
-  useTheme(settings.theme, settings.accent, settings.companion?.color, settings.motion, settings.background);
+  recoverRef.current = turn.recover;
+  turn.prefs.current = {
+    responseStyle: settings.responseStyle,
+    askBefore: settings.askBefore,
+    signedOut,
+  };
+  useTheme(settings.theme, settings.accent, settings.companion?.color, settings.motion, settings.background, settings.textSize);
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 420px)");
-    const apply = () => setWide(media.matches);
+    const media = window.matchMedia("(min-width: 480px)");
+    const apply = () => setNavWide(media.matches);
     apply();
     media.addEventListener("change", apply);
     void shouldGreet().then((greet) => { if (greet) setBlob("greeting"); });
@@ -52,10 +60,14 @@ export default function App() {
   }, []);
   useEffect(() => {
     const action = active?.action;
-    if (!active || !action?.runId) return;
-    if (action.status !== "running" && action.status !== "approved") return;
-    watchRef.current(active, action.runId);
-  }, [active?.id, active?.action?.runId, active?.action?.status]);
+    if (!active || !action) return;
+    if (action.runId && (action.status === "running" || action.status === "approved")) {
+      watchRef.current(active, action.runId);
+      return;
+    }
+    if (action.planId && (action.status === "running" || action.status === "approved"))
+      void recoverRef.current(active);
+  }, [active?.id, active?.action?.runId, active?.action?.status, active?.action?.planId]);
   useEffect(() => {
     if (blob !== "greeting") return;
     const timer = window.setTimeout(() => setBlob("idle"), 700);
@@ -74,7 +86,9 @@ export default function App() {
   const typing = Boolean(turn.draft.trim()) && !turn.streaming && !reading;
   const resting = blob === "idle" ? settings.companion?.mood ?? "idle" : blob;
   const state: BlobState = link.kind === "offline" ? "sleepy" : thinking ? "thinking" : typing ? "listening" : resting;
-  const line = liveLine({ reading, streaming: turn.streaming, status, hasPage: Boolean(pageTitle(page) || source) });
+  const title = pageTitle(page) || source?.title || "";
+  const line = liveLine({ reading, streaming: turn.streaming, status, hasPage: Boolean(title), page: title });
+  const working = Boolean(reading || turn.streaming || status === "approved" || status === "running");
   async function connect() {
     try {
       const result = await connectFo();
@@ -108,42 +122,45 @@ export default function App() {
   function send() {
     void turn.send(active, source ?? active?.source, turn.draft, (created) => setActiveId(created.id));
   }
+  function openConnections() {
+    setSettingsPage("Connections");
+    setView("settings");
+  }
   const showComposer = view === "home" && ready;
-  const title = view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact";
+  const heading = view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact";
   return (
     <div className={showComposer ? "app with-composer" : "app"}>
+      <PactHeader
+        title={heading}
+        live={link.kind !== "offline"}
+        state={state}
+        appearance={settings.companion}
+        onBack={view === "home" ? undefined : () => setView("home")}
+        onList={view === "home" ? () => setView("list") : undefined}
+        onSettings={view === "home" ? () => { setSettingsPage("General"); setView("settings"); } : undefined}
+      />
       <div className="scroll">
-        <PactHeader
-          title={title}
-          live={link.kind !== "offline"}
-          state={state}
-          appearance={settings.companion}
-          onBack={view === "home" ? undefined : () => setView("home")}
-          onList={view === "home" ? () => setView("list") : undefined}
-          onSettings={() => setView(view === "settings" ? "home" : "settings")}
-        />
         <div className="pane">
           {link.kind === "loading" && view !== "settings" ? (
             <p className="site-line">Opening Pact…</p>
           ) : !ready && view !== "settings" ? (
             <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : view === "settings" ? (
-            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} demo={!!health?.demo} onRefresh={() => void refresh()} onDeleted={() => void deleted()} onAsk={(text) => { setView("home"); void turn.send(active, source ?? active?.source, text, (created) => setActiveId(created.id)); }} />
+            <SettingsSheet settings={settings} onChange={updateSettings} fo={health?.fo} navWide={navWide} page={settingsPage} onPage={setSettingsPage} onRefresh={() => void refresh()} onDeleted={() => void deleted()} demo={!!health?.demo} />
           ) : view === "list" ? (
             <PactList pacts={pacts.filter((item) => !item.archived)} appearance={settings.companion} onOpen={(id) => { setActiveId(id); setView("home"); }} />
           ) : !active ? (
-            <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(pageTitle(page) || source)} pageMark={page?.host?.slice(0, 1).toUpperCase()} onConnect={() => void connect()} onRead={() => void readPage()} onAsk={turn.setDraft} />
+            <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
           ) : (
-            <Transcript active={active} busy={turn.busy || turn.streaming} signedOut={link.kind === "fo"} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact).then((next) => next && setActiveId(next.id))} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
+            <Transcript active={active} busy={turn.busy} streaming={turn.streaming} signedOut={signedOut} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact)} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
           )}
           {turn.note && <p className="note">{turn.note}</p>}
         </div>
       </div>
       {showComposer && (
         <div className="dock">
-          {(active?.source ?? source) && <SourceChip source={(active?.source ?? source)!} />}
-          <LivePill text={line} state={state} appearance={settings.companion} demo={!!health?.demo} />
-          <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} />
+          <LivePill text={line} state={state} appearance={settings.companion} demo={!!health?.demo} working={working} />
+          <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} sendWithEnter={settings.sendWithEnter !== false} />
         </div>
       )}
     </div>

@@ -2,12 +2,17 @@
 .settings nav {
   width: 148px;
   flex: none;
-  background: var(--bg-sidebar);
-  padding: 8px;
+  height: fit-content;
+  margin: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+:root[data-theme="light"] .settings nav { background: rgba(0, 0, 0, 0.03); }
 .settings nav button, .settings-link {
   height: 32px;
   border: 0;
@@ -23,7 +28,22 @@
 }
 .settings nav button svg, .stack-label svg { color: var(--text-2); flex: none; }
 .settings nav button[aria-current="page"] svg { color: var(--text-1); }
-.settings nav button[aria-current="page"] { background: var(--selected); }
+.settings nav button[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-weight: 600;
+}
+:root[data-theme="light"] .settings nav button[aria-current="page"] { background: rgba(0, 0, 0, 0.06); }
+@media (max-width: 479px) {
+  .settings { flex-direction: column; }
+  .settings nav {
+    width: auto;
+    flex-direction: row;
+    margin: 8px 12px 0;
+    overflow: auto;
+  }
+  .settings nav button { flex: none; }
+}
 .settings-body { flex: 1; min-width: 0; padding: 8px 12px 24px; position: relative; }
 .settings-close { position: absolute; top: 8px; right: 8px; }
 .settings-body h2 { margin: 8px 0 12px; padding-right: 36px; font-size: 15px; font-weight: 600; }
@@ -32,7 +52,7 @@
   background: color-mix(in srgb, var(--surface-2) 85%, transparent);
   border: 1px solid var(--hairline);
   border-radius: var(--r-card);
-  overflow: hidden;
+  overflow: visible;
 }
 .set-row {
   min-height: 48px;
@@ -44,9 +64,23 @@
   position: relative;
   font-size: 13px;
 }
-.set-row.conn { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
-.conn-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
-.conn-name svg { flex: none; color: var(--text-2); }
+.set-row.conn {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) max-content max-content;
+  column-gap: 8px;
+  align-items: center;
+}
+.conn-icon { width: 24px; height: 24px; display: grid; place-items: center; color: var(--text-2); }
+.conn-icon svg { flex: none; }
+.conn-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.conn-meta, .set-row.conn .text-btn { white-space: nowrap; flex-shrink: 0; }
+.set-row.conn .text-btn { min-width: max-content; }
 .conn-meta { color: var(--text-2); font-size: 12px; }
 .conn-note { margin: 8px 4px 0; color: var(--text-2); font-size: 12px; }
 .set-row .text-btn:disabled { opacity: 0.45; }
@@ -120,7 +154,7 @@
 .menu-trigger {
   height: 28px;
   border: 0;
-  border-radius: 9999px;
+  border-radius: 8px;
   background: var(--surface-3);
   color: var(--text-1);
   padding: 0 8px 0 12px;
@@ -136,8 +170,9 @@
   bottom: auto;
   left: auto;
   min-width: 160px;
-  z-index: 4;
+  z-index: 6;
 }
+.menu.pop.up { top: auto; bottom: calc(100% - 4px); }
 .stack-label { display: inline-flex; align-items: center; gap: 8px; }
 .stack-row {
   width: 100%;
