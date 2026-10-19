@@ -11,9 +11,9 @@ A self-contained, buildless marketing site. This package is independent of the C
 
 ## Design and media
 
-The user supplied `/Users/tito/Downloads/DESIGN (1).md` (Superhuman) and the corresponding website screenshot as visual references. Pact uses original copy, its existing orange companion identity and warm extension gradients, with parchment/wine/lilac website colors, a lagoon connection band, an atmospheric finale and a wine footer. This does not change the extension theme.
+The user supplied `/Users/tito/Downloads/DESIGN (1).md` (Superhuman), `/Users/tito/Downloads/DESIGN (2).md` (Wispr Flow), and the Superhuman website screenshot as visual references. The combined original direction uses Superhuman’s cinematic composition, glass UI, wine/lilac palette and product rhythm, with Wispr Flow’s large editorial serif, cream floating navigation, ink-bordered lavender actions and rounded dark chamber. The user explicitly requested a textured gradient and person-free artwork; this takes precedence over the Wispr document’s flat-color recommendation. Pact’s orange companion and extension identity remain intact. The hero clearly introduces Chrome + Claude + page context + Fo. This does not change the extension theme.
 
-`assets/horizon.webp` is original AI-generated editorial artwork, optimized to WebP. `assets/inter.woff2` is Inter Variable, distributed under the included SIL Open Font License. SVG companion is native vector artwork based on Pact's existing round orange character. Product examples are deliberately labeled illustrative; no task is executed by the site.
+`assets/horizon-texture.webp` is an original AI-edited cinematic textured horizon with no people, optimized to WebP. `assets/inter.woff2` is Inter Variable, distributed under the included SIL Open Font License. The additional EB Garamond variable fonts (regular and true italic) are locally subsetted and distributed under their included SIL Open Font License. SVG companion is native vector artwork based on Pact's existing round orange character. Product examples are deliberately labeled illustrative; no task is executed by the site.
 
 ## Release contract
 

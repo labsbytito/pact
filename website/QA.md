@@ -25,3 +25,9 @@ Limitations:
 - Website browser QA does not verify the extension's page access, attachments, Fo sign-in, Google Workspace, phone/email, custom tools, or execution outcomes.
 - App visual polish remains with Cursor cloud; this branch does not alter the extension.
 - No production publication or merge performed.
+
+## Design revision — Superhuman + Wispr Flow
+
+Read both user-supplied references in full: DESIGN (1).md (Superhuman), DESIGN (2).md (Wispr Flow). The updated direction combines a person-free cinematic textured horizon, large EB Garamond regular/true-italic display type, cream floating navigation, lavender ink-bordered actions, and a rounded near-black chamber around the Fo story. Inter remains the body/UI font. The explicit user request for a textured gradient overrides the Wispr reference's flat-color guidance. Hero copy now explains the actual product category and relationship: Chrome companion, Claude conversation/page context, Fo tasks.
+
+The mobile hero was adjusted after direct visual inspection found the right product card overlapping the CTA. The card now starts below the hero copy at 360px. Desktop and mobile screenshots refreshed. Original people-containing artwork is removed from the website package. Release status and extension ownership are unchanged.
