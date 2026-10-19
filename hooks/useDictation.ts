@@ -10,6 +10,7 @@ type Rec = {
   onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
+  active?: boolean;
   onresult: ((event: {
     resultIndex: number;
     results: ArrayLike<{ isFinal: boolean; 0?: { transcript?: string } }>;
@@ -24,11 +25,12 @@ export function useDictation(
   const [listening, setListening] = useState(false);
   const recRef = useRef<Rec | null>(null);
   const baseRef = useRef("");
+  const lastSet = useRef("");
   const latest = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     // The grant page tells us when the mic is allowed, so start straight away instead of asking for a second tap.
     const onMessage = (message: { type?: string }) => {
-      if (message?.type === "pact-mic-granted") void latest.current();
+      if (message?.type === "pact-mic-granted" && !recRef.current?.active) void latest.current();
     };
     if (typeof chrome === "undefined" || !chrome.runtime?.onMessage) return;
     chrome.runtime.onMessage.addListener(onMessage);
@@ -82,6 +84,7 @@ export function useDictation(
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onstart = () => {
+      recognition.active = true;
       setListening(true);
       setDraft((current) => {
         baseRef.current = current;
@@ -97,9 +100,21 @@ export function useDictation(
         else interim += piece;
       }
       const join = (base: string, text: string) => (text.trim() ? `${base}${base && !/\s$/.test(base) ? " " : ""}${text.trim()}` : base);
-      if (finalText.trim()) baseRef.current = join(baseRef.current, finalText);
+      if (finalText.trim()) {
+        setDraft((current) => {
+          if (current !== lastSet.current) baseRef.current = current;
+          return current;
+        });
+        baseRef.current = join(baseRef.current, finalText);
+      }
       // Words appear as they are spoken; the draft settles when the phrase is final.
-      setDraft(join(baseRef.current, interim));
+      // Rebase on whatever is in the box now, so text typed or sent during dictation is never overwritten.
+      setDraft((current) => {
+        if (current !== lastSet.current) baseRef.current = current;
+        const next = join(baseRef.current, interim);
+        lastSet.current = next;
+        return next;
+      });
     };
     recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed")
@@ -108,7 +123,10 @@ export function useDictation(
         setNote("Dictation couldn’t finish. Try again, or type your message.");
       setListening(false);
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      recognition.active = false;
+      setListening(false);
+    };
     recRef.current = recognition;
     try {
       recognition.start();

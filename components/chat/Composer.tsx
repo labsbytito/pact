@@ -36,6 +36,13 @@ export function Composer({
   const depth = useRef(0);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    // A file dropped anywhere else would make Chrome navigate the panel to it.
+    const stop = (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => { window.removeEventListener("dragover", stop); window.removeEventListener("drop", stop); };
+  }, []);
+  useEffect(() => {
     // The transcript keeps clear of the composer however tall it grows (attachments, notes, multi-line text).
     const el = wrap.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -74,7 +81,8 @@ export function Composer({
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
         event.preventDefault(); depth.current = 0; setDragging(false);
-        if (!streaming && !preparing) void attach(Array.from(event.dataTransfer.files));
+        if (streaming || preparing) { setError("Wait for the current reply before attaching files."); return; }
+        void attach(Array.from(event.dataTransfer.files));
       }}
     >
       {dragging && <div className="drop-hint" aria-hidden="true">Drop to attach</div>}
@@ -109,7 +117,7 @@ export function Composer({
           onChange={(event) => onChange(event.target.value)}
           onPaste={(event) => {
             const files = Array.from(event.clipboardData.files);
-            if (!files.length || streaming || preparing) return;
+            if (!files.length || streaming || preparing || event.clipboardData.getData("text/plain")) return;
             event.preventDefault();
             void attach(files);
           }}

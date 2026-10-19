@@ -113,6 +113,9 @@ document.documentElement.classList.add('js');
 const reduce = () => motionQuery.matches;
 const revealTargets = document.querySelectorAll('.section-meta, .intro h2, .intro-body, .principles, .section-heading, .demo-tabs, .demo-panel, .connection-copy, .cmap, .control-heading, .control-row, .install-grid > *, .quick-start h2, .faq details, .finale .wrap > *');
 revealTargets.forEach(el => el.setAttribute('data-reveal', ''));
+const revealAll = () => revealTargets.forEach(el => el.classList.add('in'));
+window.addEventListener('error', revealAll);
+window.addEventListener('beforeprint', revealAll);
 if ('IntersectionObserver' in window && !reduce()) {
   const seen = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('in'); seen.unobserve(entry.target); } }), { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
   revealTargets.forEach(el => seen.observe(el));
@@ -145,6 +148,7 @@ if (typed && proposal && status && !reduce()) {
     ['Add the walk to your calendar for Saturday at 10:00.', 'Illustrative proposal · Nothing happens until you approve']
   ];
   (async () => {
+    try {
     await sleep(2600);
     for (let i = 1; !reduce(); i = (i + 1) % prompts.length) {
       typed.classList.add('type-caret');
@@ -158,5 +162,6 @@ if (typed && proposal && status && !reduce()) {
       });
       await sleep(5200);
     }
+    } catch { /* the static card text stays */ }
   })();
 }

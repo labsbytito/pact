@@ -109,3 +109,4 @@ html{scroll-behavior:auto;scroll-padding-top:112px}
 .cmap{grid-column:1/-1;width:min(100%,500px)}
 @media(max-width:1100px){.connection-art{padding:30px 0 64px}.cmap{width:min(100%,440px)}}
 .note-right .source-line{justify-content:flex-start;align-items:center}
+@media print{[data-reveal]{opacity:1!important;translate:none!important}}

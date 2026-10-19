@@ -11,6 +11,7 @@ const verified = process.argv.includes('--verified');
 const env = { ...process.env };
 for (const line of readFileSync(resolve(root, '.env.production'), 'utf8').split('\n')) { const m = line.match(/^([A-Z0-9_]+)=(.*)$/); if (m) env[m[1]] = m[2]; }
 const run = (cmd, args, extra = {}) => execFileSync(cmd, args, { cwd: root, stdio: 'inherit', env: { ...env, ...extra } });
+if (verified) run('node', ['scripts/live-smoke.mjs']); // aborts the release if the hosted backend is not healthy
 run('pnpm', ['exec', 'wxt', 'build']);
 run('node', ['scripts/package-judges.mjs', resolve(root, '.output/judges')], { PACT_RELEASE_READY: verified ? '1' : '' });
 const zip = resolve(root, '.output/judges/pact-judges.zip');

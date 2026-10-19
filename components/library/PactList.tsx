@@ -57,6 +57,7 @@ export function PactList({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
+  const settled = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuId) return;
@@ -76,6 +77,8 @@ export function PactList({
   const archivedCount = pacts.filter((p) => !p.deletedAt && p.archived).length;
 
   function commitRename(pact: Pact) {
+    if (settled.current) return;
+    settled.current = true;
     const name = draft.trim();
     setRenaming(null);
     if (name && name !== pact.title) onChange?.(pact.id, "rename", name);
@@ -98,7 +101,7 @@ export function PactList({
         ) : renaming === pact.id ? (
           <form className="library-rename" onSubmit={(event) => { event.preventDefault(); commitRename(pact); }}>
             <PactBlob size={20} state="still" appearance={pact.companion?.appearance ?? appearance} />
-            <input autoFocus value={draft} maxLength={60} aria-label="Pact name" onChange={(event) => setDraft(event.target.value)} onBlur={() => commitRename(pact)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setRenaming(null); } }} />
+            <input autoFocus value={draft} maxLength={60} aria-label="Pact name" onChange={(event) => setDraft(event.target.value)} onBlur={() => commitRename(pact)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); settled.current = true; setRenaming(null); } }} />
           </form>
         ) : (
           <>
@@ -119,7 +122,7 @@ export function PactList({
               </button>
               {menu && (
                 <div className="library-menu glass" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setMenuId(null); setDraft(pact.title); setRenaming(pact.id); }}><Pencil size={14} />Rename</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuId(null); setDraft(pact.title); settled.current = false; setRenaming(pact.id); }}><Pencil size={14} />Rename</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); onChange?.(pact.id, "pin"); }}>{pact.pinned ? <PinOff size={14} /> : <Pin size={14} />}{pact.pinned ? "Unpin" : "Pin"}</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); download(pact); }}><Download size={14} />Export as Markdown</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); onChange?.(pact.id, "archive"); }}>{pact.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}{pact.archived ? "Restore" : "Archive"}</button>

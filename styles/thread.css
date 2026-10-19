@@ -481,3 +481,5 @@ html[data-motion="reduced"] .live-dot { animation: none; }
 .library-confirm div { display: flex; gap: 8px; justify-content: flex-end; }
 .library-confirm button { height: 30px; padding: 0 12px; border: 0; border-radius: var(--r-control); background: var(--surface-3); color: var(--text-1); font: inherit; font-size: 13px; cursor: pointer; }
 .library-confirm button.danger { background: var(--danger); color: #fff; }
+
+.library { padding-bottom: 220px; }

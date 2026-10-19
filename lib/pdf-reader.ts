@@ -57,7 +57,8 @@ export async function readPdfSource(url: string, fallbackTitle = ""): Promise<So
     const text = pages.join("\n\n").trim();
     if (!text)
       throw new Error("This PDF has no selectable text (it may be a scan). Attach it with + to let Claude read the images.");
-    const name = decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "");
+    let name = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+    try { name = decodeURIComponent(name); } catch { /* keep the raw segment */ }
     return {
       title: (meta?.Title?.trim() || fallbackTitle || name || "PDF document").slice(0, 300),
       url,
