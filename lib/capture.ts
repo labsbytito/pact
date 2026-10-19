@@ -1,6 +1,7 @@
 import type { Source } from "./model";
 import { pageAccess } from "./page-access";
 import type { CaptureMode } from "./page-reader";
+import { readPdfSource } from "./pdf-reader";
 import { SITE_ACCESS_DENIED } from "./site-access";
 export { pageAccess };
 export type SelectionRequest = {
@@ -26,6 +27,16 @@ function isPdfAddress(url: string) {
     )
       return true;
     return /\.pdf$/i.test(decodeURIComponent(parsed.pathname));
+  } catch {
+    return false;
+  }
+}
+
+/** Chrome's built-in viewer serves PDFs from addresses with no .pdf suffix (arxiv.org/pdf/…). Ask the page. */
+async function isPdfDocument(tabId: number) {
+  try {
+    const [probe] = await chrome.scripting.executeScript({ target: { tabId }, func: () => document.contentType });
+    return probe?.result === "application/pdf";
   } catch {
     return false;
   }
@@ -113,11 +124,11 @@ export async function capturePage(
   // unread site, separate from chrome:// and the Chrome Web Store.
   const address = tab.url || tab.pendingUrl || "";
   if (!address) throw new Error(PAGE_NOT_VISIBLE);
-  if (isPdfAddress(address))
-    throw new Error(
-      "Pact can't read PDFs yet. Copy the text you need and paste it here.",
-    );
-  if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
+  if (pageAccess(address) === "restricted" && !isPdfAddress(address)) throw new Error(PROTECTED_PAGE);
+  if (mode === "page" && !request && (isPdfAddress(address) || (await isPdfDocument(target.tabId)))) {
+    const pdf = await readPdfSource(address, tab.title);
+    return { ...pdf, tabId: target.tabId, windowId: target.windowId };
+  }
   if (request && !samePage(request.url, address))
     throw new Error("The selected page changed. Select the text again.");
   try {

@@ -9,7 +9,11 @@ import "../../styles/thread.css";
 import "../../styles/settings.css";
 import "../../styles/companion.css";
 import App from "./App";
+import { readPdfSource } from "../../lib/pdf-reader";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode><App /></React.StrictMode>,
 );
+
+// Test-only hook for automated checks of the bundled readers. Stripped from production builds.
+if (import.meta.env.WXT_PUBLIC_PACT_TEST === "1") (window as unknown as { __pactTest?: unknown }).__pactTest = { readPdfSource };

@@ -36,7 +36,7 @@ export function interpretationContext(
       selectionLabel: s.selectionLabel?.slice(0, 80),
       title: s.title.slice(0, 1000),
       description: s.description.slice(0, 4000),
-      text: s.text.slice(0, 12000),
+      text: s.text.slice(0, s.description.startsWith("PDF ·") ? 22000 : 12000),
       selection: s.selection.slice(0, 4000),
       transcript: [...unique.values()].sort((a, b) => a.start - b.start),
       transcriptPartial:
