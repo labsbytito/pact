@@ -1,8 +1,8 @@
 {
   "status": "ready",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "downloadUrl": "./downloads/pact-judges.zip",
-  "sha256": "51f7f539b4eabae405d80fa91d497bd14f9acc719a88cabbeb736dac74b48290",
+  "sha256": "0488874f163345fac021891feb4dfbc5bf4ba2a56ef6701688474c431efa46a2",
   "backendStatus": "verified",
-  "notes": "Verified against the live backend."
+  "notes": "Page-reading patch: follows the current tab and captures explicit page requests. Existing hosted backend unchanged."
 }
