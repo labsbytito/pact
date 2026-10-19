@@ -8,7 +8,7 @@ export function ResultCard({ text }: { text: string }) {
   const sentence = body.charAt(0).toUpperCase() + body.slice(1);
   return (
     <div className="msg assistant follow">
-      <div className="bubble assistant">
+      <div className="bubble assistant" aria-label="Fo's reply">
         <Markdown text={sentence} />
         {demo && <p className="result-note">This is a demo result, not a live Fo reply.</p>}
       </div>

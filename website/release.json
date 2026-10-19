@@ -2,7 +2,7 @@
   "status": "ready",
   "version": "0.1.0",
   "downloadUrl": "./downloads/pact-judges.zip",
-  "sha256": "f71794fa05da7f085169a29f7f0bde8db1cab4bf8ad346f2d484cc47fa77fea7",
+  "sha256": "724fea5951416e4b1b26335fa12296c90c6caa51bafa98e85cabe36c7af63cf1",
   "backendStatus": "verified",
   "notes": "Verified against the live backend."
 }

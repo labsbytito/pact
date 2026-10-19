@@ -42,3 +42,32 @@ export function prefersReducedMotion(): boolean {
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 }
+
+/** Eye offset (viewBox units) toward a pointer delta in px; smaller blobs reach further so it reads. */
+export function lookOffset(dx: number, dy: number, size: number): { x: number; y: number } {
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return { x: 0, y: 0 };
+  const cap = size < 32 ? 6 : size < 72 ? 4.5 : 3.2;
+  const amount = Math.min(cap, (dist / 90) * cap);
+  return { x: (dx / dist) * amount, y: (dy / dist) * amount };
+}
+
+export type IdleMove = "stretch" | "look" | "yawn";
+const IDLE_MOVES: IdleMove[] = ["stretch", "look", "yawn"];
+
+/** Randomised 8–20s wait between idle micro-behaviours. */
+export function idleDelay(rand = Math.random()): number {
+  return 8000 + Math.min(1, Math.max(0, rand)) * 12000;
+}
+
+export function pickIdle(rand = Math.random()): IdleMove {
+  return IDLE_MOVES[Math.min(IDLE_MOVES.length - 1, Math.floor(Math.max(0, rand) * IDLE_MOVES.length))] ?? "stretch";
+}
+
+/** Reaction to a state change: finishing work is a happy hop, error is a worried shake. */
+export function reactionFor(prev: BlobState, next: BlobState): "cheer" | "worry" | null {
+  if (next === "error" && prev !== "error") return "worry";
+  const busy = prev === "thinking" || prev === "speaking" || prev === "listening";
+  if (busy && (next === "idle" || next === "happy" || next === "still")) return "cheer";
+  return null;
+}

@@ -1,7 +1,7 @@
-export function ApproveButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+export function ApproveButton({ disabled, onClick, retry }: { disabled: boolean; onClick: () => void; retry?: boolean }) {
   return (
     <button className="approve" type="button" disabled={disabled} onClick={onClick}>
-      {disabled ? "Sent to Fo" : "Approve"}
+      {disabled ? "Sent to Fo" : retry ? "Retry" : "Approve"}
     </button>
   );
 }

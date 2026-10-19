@@ -30,3 +30,13 @@ test("delete removes chat and files while retaining action evidence and blocks s
  assert.equal(groupLibraryPacts([deleted], [], { archived: false, query: "" })[0]?.pacts.length, 0);
  const stale = retainPactMetadata(deleted, pact); assert.deepEqual(stale.messages, []); assert.ok(stale.deletedAt);
 });
+test("companion command changes look and name, and stale snapshots do not revert it", () => {
+ const pact = migratePact(makePact("Chat"), companion);
+ const next = { name: " Fern ", appearance: { shape: 9, color: "#22C55E", v: 2 as const } };
+ const changed = changePact(pact, "companion", next);
+ assert.deepEqual(changed.companion, { name: "Fern", appearance: next.appearance });
+ assert.deepEqual(changePact(pact, "companion"), pact);
+ const stale = retainPactMetadata(changed, { ...pact, title: "AI title" });
+ assert.deepEqual(stale.companion, changed.companion);
+ assert.equal(changePact(changed, "companion", { name: " ", appearance: next.appearance }).companion?.name, "Fern");
+});

@@ -22,3 +22,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     return fail(req, error);
   }
 }
+
+export function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: json(req, {}).headers });
+}

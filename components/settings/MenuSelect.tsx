@@ -3,11 +3,13 @@ import { ChevronDown } from "lucide-react";
 
 export function MenuSelect({
   label,
+  hint,
   value,
   options,
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
@@ -26,7 +28,7 @@ export function MenuSelect({
   }, [open]);
   return (
     <div className="menu-select" ref={root}>
-      <span>{label}</span>
+      <span className="ms-label">{label}{hint && <small className="ms-hint">{hint}</small>}</span>
       <button className="menu-trigger" type="button" aria-expanded={open} aria-haspopup="listbox" onClick={() => {
         const box = root.current?.getBoundingClientRect();
         const space = window.innerHeight - (box?.bottom ?? 0);

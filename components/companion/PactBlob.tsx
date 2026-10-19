@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { brandCharacter, characterFor, type CompanionAppearance, type CompanionMood } from "../../lib/character";
-import { prefersReducedMotion, type BlobState } from "../../lib/pact-blob";
+import { idleDelay, lookOffset, pickIdle, prefersReducedMotion, reactionFor, type BlobState } from "../../lib/pact-blob";
 
 function faceFor(state: BlobState, mood: CompanionMood): CompanionMood | "greeting" {
   if (state === "still" || state === "error") return "idle";
@@ -46,8 +46,39 @@ export function PactBlob({
     return () => observer.disconnect();
   }, []);
   const motion = live && setting !== "off" && !prefersReducedMotion();
-  const follow = motion && size >= 72 && setting === "on" && face !== "sleepy";
+  const follow = motion && size >= 16 && setting === "on" && face !== "sleepy";
   const mode = !motion ? "off" : setting === "reduced" ? "reduced" : "on";
+  const [react, setReact] = useState<string>("");
+  const prevState = useRef(state);
+  useEffect(() => {
+    const kind = reactionFor(prevState.current, state);
+    prevState.current = state;
+    if (!kind || !motion) return;
+    setReact(kind);
+    const t = window.setTimeout(() => setReact(""), 900);
+    return () => window.clearTimeout(t);
+  }, [state, motion]);
+  const [idle, setIdle] = useState<string>("");
+  useEffect(() => {
+    if (!motion || setting !== "on" || face === "sleepy" || state === "listening") return;
+    let wait = 0;
+    let clear = 0;
+    const schedule = () => {
+      wait = window.setTimeout(() => {
+        if (document.visibilityState === "visible") {
+          setIdle(pickIdle());
+          clear = window.setTimeout(() => setIdle(""), 1800);
+        }
+        schedule();
+      }, idleDelay());
+    };
+    schedule();
+    return () => {
+      window.clearTimeout(wait);
+      window.clearTimeout(clear);
+      setIdle("");
+    };
+  }, [motion, setting, face, state]);
   useEffect(() => {
     if (motion) setPop((n) => n + 1);
   }, [face, motion]);
@@ -93,21 +124,28 @@ export function PactBlob({
       setLook({ x: 0, y: 0 });
       return;
     }
-    const onMove = (event: PointerEvent) => {
+    let frame = 0;
+    let last: PointerEvent | null = null;
+    const apply = () => {
+      frame = 0;
+      const event = last;
+      if (!event) return;
       const box = ref.current?.getBoundingClientRect();
       if (!box) return;
       const dx = event.clientX - (box.left + box.width / 2);
       const dy = event.clientY - (box.top + box.height / 2);
-      const reach = Math.hypot(dx, dy) || 1;
-      const cap = 1.6;
-      setLook({
-        x: (dx / reach) * Math.min(cap, Math.abs(dx) / 90),
-        y: (dy / reach) * Math.min(cap, Math.abs(dy) / 90),
-      });
+      setLook(lookOffset(dx, dy, size));
     };
-    window.addEventListener("pointermove", onMove);
-    return () => window.removeEventListener("pointermove", onMove);
-  }, [follow]);
+    const onMove = (event: PointerEvent) => {
+      last = event;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [follow, size]);
   const eye = character.eye;
   const closed = face === "sleepy" ? 0.55 : lid;
   const height = face === "sleepy" ? eye.height * 0.42 : eye.height;
@@ -116,9 +154,9 @@ export function PactBlob({
   const right = eye.cx + eye.gap / 2;
   const bob = state === "listening" ? "listening" : face === "greeting" ? "greeting" : face;
   return (
-    <span ref={ref} className="blob" data-state={state} data-bob={bob} data-motion={mode} data-live={live ? "on" : "off"} style={{ width: size, height: size }} aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
+    <span ref={ref} className="blob" data-state={state} data-bob={bob} data-motion={mode} data-live={live ? "on" : "off"} data-size={size < 32 ? "sm" : "md"} data-react={react || undefined} data-idle={idle || undefined} data-face={face} style={{ width: size, height: size }} aria-hidden={label ? undefined : true} role={label ? "img" : undefined} aria-label={label}>
       <svg viewBox="0 0 100 100" width={size} height={size}>
-        <g className="blob-body">
+        <g className="blob-body"><g className="blob-react">
           <g className="blob-pop" data-pop={pop % 2}>
           <g className="blob-face" style={{ transform: `rotate(${character.tilt}deg)` }}>
             <path d={character.path} fill={character.color} />
@@ -135,6 +173,7 @@ export function PactBlob({
                 </g>
               )}
             </g>
+          </g>
           </g>
           </g>
         </g>

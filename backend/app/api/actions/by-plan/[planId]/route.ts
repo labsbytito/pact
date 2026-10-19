@@ -24,3 +24,6 @@ export async function GET(req: Request, context: { params: Promise<{ planId: str
     return fail(req, error);
   }
 }
+export function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: json(req, {}).headers });
+}

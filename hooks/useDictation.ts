@@ -48,7 +48,15 @@ export function useDictation(
       setNote("Microphone is blocked. Open mic settings, allow Pact, then try again.");
       return;
     }
-    if (permission !== "granted") {
+    if (permission !== "granted" && !(typeof chrome !== "undefined" && chrome.runtime?.id)) {
+      // Web demo: an ordinary page can ask for the microphone itself.
+      try {
+        await probeMicrophone();
+      } catch {
+        setNote("Microphone is blocked. Allow it in your browser’s address bar, then try again.");
+        return;
+      }
+    } else if (permission !== "granted") {
       try {
         await openMicPermissionPage();
       } catch (error) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Pact, Settings } from "../lib/model";
+import type { PactCompanion } from "../lib/model";
 import { migratePact, retainPactMetadata, changePact } from "../lib/pact-data";
 import { emptySettings, normalizeSettings } from "../lib/settings";
 import { read, write } from "../lib/storage";
@@ -84,7 +85,7 @@ export function useVault() {
       return next;
     });
   }, []);
-  const change = useCallback((id: string, command: "pin" | "archive" | "delete" | "rename", name?: string) => {
+  const change = useCallback((id: string, command: "pin" | "archive" | "delete" | "rename" | "companion", name?: string | PactCompanion) => {
     setPacts((list) => {
       const updated = list.map((p) => p.id === id ? changePact(p, command, name) : p);
       pending.current = updated;

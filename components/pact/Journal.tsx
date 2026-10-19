@@ -12,7 +12,7 @@ export function activityLine(action: Action) {
 
 export function Activity({ action, appearance }: { action: Action; appearance?: CompanionAppearance }) {
   return (
-    <div className="activity">
+    <div className="activity" title="Receipt: Pact asked Fo. Fo's reply appears above.">
       <span className="activity-ico"><PactBlob size={14} state="still" appearance={appearance} /></span>
       <span>{activityLine(action)}</span>
     </div>

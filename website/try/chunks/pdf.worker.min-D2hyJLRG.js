@@ -1,0 +1,1 @@
+function e(e){return new Worker(`/try/assets/pdf.worker.min-D4wteZct.js`,{name:e?.name})}export{e as default};

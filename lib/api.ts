@@ -34,26 +34,43 @@ export async function clearInstallToken() {
   tokenEpoch++;
   tokenFlight = undefined;
   installToken = "";
-  if (typeof chrome !== "undefined" && chrome.storage?.local)
-    await chrome.storage.local.remove("pactInstallToken");
+  await tokenStore.remove();
 }
+
+/** The extension keeps the install token in chrome.storage; the web demo falls back to localStorage. */
+const tokenStore = {
+  async get(): Promise<string> {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) {
+      const stored = await chrome.storage.local.get("pactInstallToken");
+      return typeof stored.pactInstallToken === "string" ? stored.pactInstallToken : "";
+    }
+    try { return localStorage.getItem("pactInstallToken") ?? ""; } catch { return ""; }
+  },
+  async set(token: string) {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) await chrome.storage.local.set({ pactInstallToken: token });
+    else try { localStorage.setItem("pactInstallToken", token); } catch { /* memory only */ }
+  },
+  async remove() {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) await chrome.storage.local.remove("pactInstallToken");
+    else try { localStorage.removeItem("pactInstallToken"); } catch { /* ignore */ }
+  },
+};
 
 async function ensureToken(force = false) {
   if (force) await clearInstallToken();
-  if (installToken || typeof chrome === "undefined" || !chrome.storage?.local) return;
+  const canStore = (typeof chrome !== "undefined" && !!chrome.storage?.local) || typeof localStorage !== "undefined";
+  if (installToken || !canStore) return;
   if (tokenFlight) return tokenFlight;
   const epoch = tokenEpoch;
   const flight = (async () => {
-    const stored = await chrome.storage.local.get("pactInstallToken");
+    const stored = await tokenStore.get();
     if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
-    if (typeof stored.pactInstallToken === "string" && stored.pactInstallToken) {
-      installToken = stored.pactInstallToken; return;
-    }
+    if (stored) { installToken = stored; return; }
     const issued = await fetch(base + "/api/install", { method: "POST" });
     const body = (await issued.json().catch(() => ({}))) as { token?: string };
     if (!issued.ok || !body.token) throw new Error("Pact couldn't connect. Try again.");
     if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
-    await chrome.storage.local.set({ pactInstallToken: body.token });
+    await tokenStore.set(body.token);
     if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
     installToken = body.token;
   })();

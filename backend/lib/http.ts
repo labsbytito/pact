@@ -13,8 +13,15 @@ export function allowedIds() {
   return set?.length ? set : [identity.id];
 }
 
+/** The public website hosts a no-install web demo of the same panel. */
+export function allowedWebOrigins() {
+  const set = process.env.ALLOWED_WEB_ORIGINS?.split(",").map((item) => item.trim()).filter(Boolean);
+  return set?.length ? set : ["https://withpact.vercel.app", "https://pact-site-weld.vercel.app"];
+}
+
 export function originAllowed(origin: string | null) {
   if (!origin) return true;
+  if (allowedWebOrigins().includes(origin.replace(/\/$/, ""))) return true;
   if (!origin.startsWith("chrome-extension://")) return false;
   const id = origin.slice("chrome-extension://".length).replace(/\/$/, "");
   return allowedIds().includes(id);

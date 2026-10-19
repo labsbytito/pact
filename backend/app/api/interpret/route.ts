@@ -31,3 +31,7 @@ export async function POST(req: Request) {
     release();
   }
 }
+
+export function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: json(req, {}).headers });
+}

@@ -1,6 +1,7 @@
 import type { Action } from "../../lib/model";
 import { visibleRequest } from "../../lib/request-text";
 import { ApproveButton } from "./ApproveButton";
+import { summarize, toolInfo } from "./toolInfo";
 
 export function ProposedRequest({
   action,
@@ -19,11 +20,22 @@ export function ProposedRequest({
 }) {
   const raw = typeof action.arguments?.message === "string" ? action.arguments.message : action.instruction;
   const message = visibleRequest(raw);
+  const tool = toolInfo(action.toolName ?? "ask_fo");
   return (
     <section className="card request" aria-label="Request to Fo">
       <h3>Request to Fo</h3>
-      <p className="request-copy">{message}</p>
-      {action.toolName !== "ask_fo" && <details><summary>Review exact {action.toolName} request</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(action.arguments, null, 2)}</pre></details>}
+      <dl className="req-meta">
+        <div><dt>Service</dt><dd>Fo</dd></div>
+        <div><dt>Action</dt><dd>{tool.name}</dd></div>
+        <div><dt>Summary</dt><dd>{summarize(message)}</dd></div>
+      </dl>
+      <details className="req-exact">
+        <summary>{action.toolName && action.toolName !== "ask_fo" ? `Review exact ${action.toolName} request` : "Review exact request"}</summary>
+        {action.toolName && action.toolName !== "ask_fo"
+          ? <pre className="mono">{JSON.stringify(action.arguments, null, 2)}</pre>
+          : <p className="request-copy">{message}</p>}
+      </details>
+      <p className="meta">Nothing happens until you approve.</p>
       {signedOut ? (
         <div className="row-actions">
           <p className="meta">Connect Fo first</p>
@@ -31,7 +43,7 @@ export function ProposedRequest({
         </div>
       ) : (
         <div className="row-actions">
-          <ApproveButton disabled={busy || (action.status !== "proposed" && action.status !== "failed")} onClick={onApprove} />
+          <ApproveButton retry={action.status === "failed"} disabled={busy || (action.status !== "proposed" && action.status !== "failed")} onClick={onApprove} />
           <button className="ghost-btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
         </div>
       )}

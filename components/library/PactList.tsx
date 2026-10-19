@@ -1,9 +1,9 @@
-import { Archive, ArchiveRestore, Download, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2 } from "lucide-react";
+import { Palette, Archive, ArchiveRestore, Download, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { sortLibraryPacts } from "../../lib/library";
 import { PactBlob } from "../companion/PactBlob";
-import type { CompanionAppearance } from "../../lib/character";
-import type { Pact } from "../../lib/model";
+import { COLOR_SWATCHES, SHAPE_OPTIONS, type CompanionAppearance } from "../../lib/character";
+import type { Pact, PactCompanion } from "../../lib/model";
 
 const tags: Record<string, string> = {
   proposed: "Waiting",
@@ -34,7 +34,7 @@ function download(pact: Pact) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-type Command = "rename" | "pin" | "archive" | "delete";
+type Command = "rename" | "pin" | "archive" | "delete" | "companion";
 
 export function PactList({
   pacts,
@@ -48,7 +48,7 @@ export function PactList({
   activeId?: string | null;
   appearance?: CompanionAppearance;
   onOpen: (id: string) => void;
-  onChange?: (id: string, command: Command, name?: string) => void;
+  onChange?: (id: string, command: Command, arg?: string | PactCompanion) => void;
   onNew?: () => void;
 }) {
   const [archived, setArchived] = useState(false);
@@ -56,6 +56,8 @@ export function PactList({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [looking, setLooking] = useState<string | null>(null);
+  const [look, setLook] = useState<PactCompanion>({ name: "", appearance: { shape: 0, color: "#F59E0B", v: 2 } });
   const [confirming, setConfirming] = useState<string | null>(null);
   const settled = useRef(false);
   const root = useRef<HTMLDivElement>(null);
@@ -98,6 +100,26 @@ export function PactList({
               <button type="button" className="danger" autoFocus onClick={() => { setConfirming(null); onChange?.(pact.id, "delete"); }}>Delete</button>
             </div>
           </div>
+        ) : looking === pact.id ? (
+          <form className="library-look" aria-label={`Change look for ${pact.title}`} onSubmit={(event) => { event.preventDefault(); setLooking(null); onChange?.(pact.id, "companion", look); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setLooking(null); } }}>
+            <input type="text" autoFocus value={look.name} maxLength={40} aria-label="Companion name" onChange={(event) => setLook({ ...look, name: event.target.value })} />
+            <div className="shapes" role="group" aria-label="Shape">
+              {SHAPE_OPTIONS.map((option) => (
+                <button key={option.shape} className="shape-btn" type="button" aria-pressed={look.appearance.shape === option.shape} aria-label={option.name} title={option.name} onClick={() => setLook({ ...look, appearance: { ...look.appearance, shape: option.shape, v: 2 } })}>
+                  <PactBlob size={40} state="still" appearance={{ ...look.appearance, shape: option.shape, v: 2 }} />
+                </button>
+              ))}
+            </div>
+            <div className="swatches" role="group" aria-label="Colour">
+              {COLOR_SWATCHES.map((swatch) => (
+                <button key={swatch.color} className="swatch" type="button" aria-label={swatch.name} title={swatch.name} aria-pressed={look.appearance.color === swatch.color} style={{ background: swatch.color }} onClick={() => setLook({ ...look, appearance: { ...look.appearance, color: swatch.color } })} />
+              ))}
+            </div>
+            <div className="library-look-actions">
+              <button type="button" onClick={() => setLooking(null)}>Cancel</button>
+              <button type="submit">Save</button>
+            </div>
+          </form>
         ) : renaming === pact.id ? (
           <form className="library-rename" onSubmit={(event) => { event.preventDefault(); commitRename(pact); }}>
             <PactBlob size={20} state="still" appearance={pact.companion?.appearance ?? appearance} />
@@ -123,6 +145,7 @@ export function PactList({
               {menu && (
                 <div className="library-menu glass" role="menu">
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); setDraft(pact.title); settled.current = false; setRenaming(pact.id); }}><Pencil size={14} />Rename</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuId(null); setLook({ name: pact.companion?.name ?? "", appearance: { ...(pact.companion?.appearance ?? appearance ?? { shape: 0, color: "#F59E0B" }), v: 2 } }); setLooking(pact.id); }}><Palette size={14} />Change look</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); onChange?.(pact.id, "pin"); }}>{pact.pinned ? <PinOff size={14} /> : <Pin size={14} />}{pact.pinned ? "Unpin" : "Pin"}</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); download(pact); }}><Download size={14} />Export as Markdown</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuId(null); onChange?.(pact.id, "archive"); }}>{pact.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}{pact.archived ? "Restore" : "Archive"}</button>

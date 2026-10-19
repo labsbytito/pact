@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { originAllowed } from "../lib/http";
 import { issueInstallToken, readInstallId } from "../lib/auth";
 import { decryptString, encryptString } from "../lib/crypto";
 import { limitInstall } from "../lib/rate-limit";
@@ -110,4 +111,10 @@ test("a mock approve is polled once per read", async () => {
   const second = await pollRun(later, later.actions.getRun(run.runId)!);
   assert.equal(second.status, "returned");
   assert.match(second.result ?? "", /demo result/);
+});
+
+test("the public website origin is allowed alongside the extension, other web origins are not", () => {
+  assert.equal(originAllowed("https://withpact.vercel.app"), true);
+  assert.equal(originAllowed("https://evil.example"), false);
+  assert.equal(originAllowed(null), true);
 });
