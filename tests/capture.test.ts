@@ -232,7 +232,7 @@ test("a page whose URL is hidden asks for a toolbar click and is not called prot
   for (const tabUrl of [null, ""]) {
     const state = setup(t, { tabUrl });
     await assert.rejects(capturePage("pick"), (error: Error) => {
-      assert.match(error.message, /toolbar icon/);
+      assert.match(error.message, /Read this page/);
       assert.equal(/protects this page/.test(error.message), false);
       return true;
     });
@@ -256,14 +256,14 @@ test("select item shows the protected-page message only for genuinely restricted
   ];
   for (const tabUrl of blocked) {
     const state = setup(t, { tabUrl });
-    await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+    await assert.rejects(capturePage("pick"), /doesn't let extensions read this page/);
     assert.equal(state.executions, 0, String(tabUrl));
   }
   const state = setup(t, {
     tabUrl: "chrome://newtab/",
     pendingUrl: "https://example.org/current",
   });
-  await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+  await assert.rejects(capturePage("pick"), /doesn't let extensions read this page/);
   assert.equal(state.executions, 0);
 });
 test("a pdf is reported directly and is not injected", async (t) => {
@@ -273,7 +273,7 @@ test("a pdf is reported directly and is not injected", async (t) => {
     "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
   ]) {
     const state = setup(t, { tabUrl });
-    await assert.rejects(capturePage("pick"), /PDF viewer/);
+    await assert.rejects(capturePage("pick"), /can't read PDFs/);
     assert.equal(state.executions, 0, tabUrl);
   }
 });
@@ -291,7 +291,7 @@ test("a gallery or chrome scripting refusal stays the protected-page message", a
   chrome.scripting.executeScript = async () => {
     throw new Error("The extensions gallery cannot be scripted.");
   };
-  await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+  await assert.rejects(capturePage("pick"), /doesn't let extensions read this page/);
 });
 test("page access allows ordinary web URLs and blocks restricted ones", () => {
   assert.equal(pageAccess("https://example.org/a"), "web");

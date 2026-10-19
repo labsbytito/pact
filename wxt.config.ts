@@ -21,8 +21,8 @@ export default defineConfig({
     const storeBuild = process.env.PACT_STORE_BUILD === "1";
     return {
       ...(storeBuild ? {} : { key: identity.key }),
-      name: "Pact — turn inspiration into action",
-      description: "A little intention. A real next step. Your companion beside the web.",
+      name: "Pact",
+      description: "Read a page, pick one next step, and let Fo do it after you approve.",
       permissions: ["storage", "activeTab", "scripting", "sidePanel", "contextMenus"],
       host_permissions: [...hosts],
       optional_host_permissions: ["http://*/*", "https://*/*"],

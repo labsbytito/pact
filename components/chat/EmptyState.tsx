@@ -3,14 +3,12 @@ import type { CompanionAppearance } from "../../lib/character";
 
 export function EmptyState({
   appearance,
-  caption,
   site,
   chips,
   onRead,
   onAsk,
 }: {
   appearance?: CompanionAppearance;
-  caption?: string;
   site: string;
   chips: string[];
   onRead: () => void;
@@ -19,8 +17,7 @@ export function EmptyState({
   return (
     <div className="empty">
       <PactBlob state="idle" size={72} live appearance={appearance} label="Pact" />
-      <p className="step-caption">{caption}</p>
-      <h2>A little intention.</h2>
+      <h2>What should we do with this page?</h2>
       <p className="site-line">{site}</p>
       <div className="ask-row">
         {chips.map((chip) => (

@@ -25,6 +25,7 @@
   --r-avatar: 8px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --accent: var(--toggle-on);
+  --on-accent: #ffffff;
 }
 
 :root[data-theme="dark"] {
@@ -37,7 +38,7 @@
   --selected: #242424;
   --surface-user: #3b3b3b;
   --on-user: #f5f5f5;
-  --hairline: #292929;
+  --hairline: #2c2c2c;
   --text-1: #f5f5f5;
   --text-2: #a8a8a8;
   --text-3: #707070;
@@ -48,6 +49,7 @@
   --danger: #ff6363;
   --fill-hover: rgba(255, 255, 255, 0.05);
   --accent: var(--toggle-on);
+  --on-accent: #ffffff;
 }
 
 :root[data-accent="pact"],
@@ -56,4 +58,4 @@
 :root[data-accent="teal"] { --toggle-on: #14b8a6; --accent: #14b8a6; }
 :root[data-accent="violet"] { --toggle-on: #7c5cbf; --accent: #7c5cbf; }
 :root[data-accent="black"] { --toggle-on: #1c1c1c; --accent: #1c1c1c; }
-:root[data-theme="dark"][data-accent="black"] { --toggle-on: #f5f5f5; --accent: #f5f5f5; }
+:root[data-theme="dark"][data-accent="black"] { --toggle-on: #f5f5f5; --accent: #f5f5f5; --on-accent: #121212; }

@@ -13,9 +13,9 @@ export type SelectionRequest = {
   frameId?: number;
 };
 const PROTECTED_PAGE =
-  "Chrome protects this page. Open a normal webpage and click Pact’s toolbar icon.";
+  "Chrome doesn't let extensions read this page. Try a regular website.";
 const PAGE_NOT_VISIBLE =
-  "Click Pact’s toolbar icon on this page, then choose Read current page or Select item.";
+  "Click Pact’s toolbar icon on this page, then tap Read this page.";
 
 function isPdfAddress(url: string) {
   try {
@@ -115,7 +115,7 @@ export async function capturePage(
   if (!address) throw new Error(PAGE_NOT_VISIBLE);
   if (isPdfAddress(address))
     throw new Error(
-      "Chrome’s PDF viewer does not share the document text. Copy a passage and use Make a Pact from selection.",
+      "Pact can't read PDFs yet. Copy the text you need and paste it here.",
     );
   if (pageAccess(address) === "restricted") throw new Error(PROTECTED_PAGE);
   if (request && !samePage(request.url, address))

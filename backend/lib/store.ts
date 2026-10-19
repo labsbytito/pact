@@ -3,6 +3,10 @@ import { dirname } from "node:path";
 import { Redis } from "@upstash/redis";
 import { storePath } from "./env";
 
+export function diskForbidden() {
+  return process.env.VERCEL === "1";
+}
+
 export interface Store {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds?: number): Promise<void>;
@@ -94,20 +98,24 @@ export function redisStore(): Store {
   };
 }
 
-let shared: Store | undefined;
+// Next dev bundles each route on its own, so a module-level singleton drops
+// held plans between interpret and approve. One store per process.
+const processStore = globalThis as typeof globalThis & { __pactStore?: Store };
 
 export function openStore() {
-  if (shared) return shared;
-  if (process.env.PACT_STORE === "memory") shared = memoryStore();
+  if (processStore.__pactStore) return processStore.__pactStore;
+  if (process.env.PACT_STORE === "memory") processStore.__pactStore = memoryStore();
   else if (
     process.env.UPSTASH_REDIS_REST_URL &&
     process.env.UPSTASH_REDIS_REST_TOKEN
   )
-    shared = redisStore();
-  else shared = fileStore();
-  return shared;
+    processStore.__pactStore = redisStore();
+  else if (diskForbidden())
+    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required");
+  else processStore.__pactStore = fileStore();
+  return processStore.__pactStore;
 }
 
 export function useStore(store: Store) {
-  shared = store;
+  processStore.__pactStore = store;
 }

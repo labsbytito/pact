@@ -36,6 +36,8 @@ export type Action = {
   arguments?: Record<string, unknown>;
   contextHash?: string;
   consequential?: boolean;
+  /** Stable for the life of this proposal, including a retry after a lost response. */
+  requestId?: string;
   status:
     | "proposed"
     | "approved"

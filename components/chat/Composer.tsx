@@ -39,7 +39,7 @@ export function Composer({
           if (!streaming) onSend();
         }}
       >
-        <button className="icon-btn" type="button" aria-label="Add" onClick={() => setMenu((open) => !open)}>+</button>
+        <button className="icon-btn" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>+</button>
         <textarea
           ref={box}
           rows={1}

@@ -3,16 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Pact</title>
-    <script>
-      try {
-        var theme = JSON.parse(localStorage.getItem("pact-theme") || '"system"');
-        var dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.dataset.theme = dark ? "dark" : "light";
-        document.documentElement.style.background = dark ? "#121212" : "#fcfcfc";
-      } catch (e) {}
-    </script>
-    <style>html, body { background: #121212; }</style>
+    <style>
+      html, body { background: #fcfcfc; }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #121212; }
+      }
+    </style>
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

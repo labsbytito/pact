@@ -1,6 +1,10 @@
 import { readFile, mkdir, writeFile, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { callFo } from "./fo";
+
+type ThreadStore = {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+};
 type ToolReply = {
   content?: unknown;
   structuredContent?: unknown;
@@ -19,31 +23,45 @@ export class Threads {
   private writing: Promise<void> = Promise.resolve();
   // Bumped whenever all handles are dropped, so an in-flight ask cannot re-save a handle afterwards.
   epoch = 0;
-  private constructor(private directory: URL) {}
-  static async open(directory: URL) {
-    const threads = new Threads(directory);
+  private constructor(private write: (json: string) => Promise<void>) {}
+  private async hydrate(read: () => Promise<string | null>) {
     try {
-      const saved = JSON.parse(
-        await readFile(new URL("fo-threads.json", directory), "utf8"),
-      );
+      const raw = await read();
+      const saved = raw ? JSON.parse(raw) : null;
       if (saved && typeof saved === "object")
         for (const [k, v] of Object.entries(saved))
-          if (typeof v === "string") threads.map[k] = v;
-    } catch {}
+          if (typeof v === "string") this.map[k] = v;
+    } catch {
+      /* a missing record starts empty */
+    }
+  }
+  static async open(directory: URL) {
+    const file = new URL("fo-threads.json", directory);
+    const threads = new Threads(async (json) => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const temp = new URL(`fo-threads.${randomUUID()}.tmp`, directory);
+      await writeFile(temp, json, { mode: 0o600 });
+      await rename(temp, file);
+    });
+    await threads.hydrate(async () => {
+      try {
+        return await readFile(file, "utf8");
+      } catch {
+        return null;
+      }
+    });
+    return threads;
+  }
+  static async openStore(store: ThreadStore, key: string) {
+    const threads = new Threads((json) => store.set(key, json));
+    await threads.hydrate(() => store.get(key));
     return threads;
   }
   get(pactId: string) {
     return Object.hasOwn(this.map, pactId) ? this.map[pactId] : undefined;
   }
   private persist() {
-    const w = this.writing
-      .catch(() => {})
-      .then(async () => {
-        await mkdir(this.directory, { recursive: true, mode: 0o700 });
-        const temp = new URL(`fo-threads.${randomUUID()}.tmp`, this.directory);
-        await writeFile(temp, JSON.stringify(this.map), { mode: 0o600 });
-        await rename(temp, new URL("fo-threads.json", this.directory));
-      });
+    const w = this.writing.catch(() => {}).then(() => this.write(JSON.stringify(this.map)));
     this.writing = w;
     return w;
   }
@@ -291,11 +309,3 @@ export function createFoRunner(deps: { call: Caller; threads: Threads }) {
     return next;
   };
 }
-
-const threads = await Threads.open(new URL("../.local/", import.meta.url));
-export const runFoAction = createFoRunner({
-  call: async (n, a) => (await callFo(n, a)) as ToolReply,
-  threads,
-});
-// Called on disconnect or when a new Fo sign-in begins, so another account never inherits a conversation.
-export const forgetFoThreads = () => threads.forgetAll();

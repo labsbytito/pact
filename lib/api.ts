@@ -28,20 +28,27 @@ const base =
 
 let installToken = "";
 
+export async function clearInstallToken() {
+  installToken = "";
+  if (typeof chrome !== "undefined" && chrome.storage?.local)
+    await chrome.storage.local.remove("pactInstallToken");
+}
+
+async function ensureToken(force = false) {
+  if (force) await clearInstallToken();
+  if (installToken || typeof chrome === "undefined" || !chrome.storage?.local) return;
+  const stored = await chrome.storage.local.get("pactInstallToken");
+  installToken = typeof stored.pactInstallToken === "string" ? stored.pactInstallToken : "";
+  if (installToken) return;
+  const issued = await fetch(base + "/api/install", { method: "POST" });
+  const body = (await issued.json().catch(() => ({}))) as { token?: string };
+  if (!issued.ok || !body.token) throw new Error("Pact couldn't connect. Try again.");
+  installToken = body.token;
+  await chrome.storage.local.set({ pactInstallToken: installToken });
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
-  if (!installToken && typeof chrome !== "undefined" && chrome.storage?.local) {
-    const stored = await chrome.storage.local.get("pactInstallToken");
-    installToken =
-      typeof stored.pactInstallToken === "string" ? stored.pactInstallToken : "";
-    if (!installToken) {
-      const issued = await fetch(base + "/api/install", { method: "POST" });
-      const body = (await issued.json().catch(() => ({}))) as { token?: string };
-      if (!issued.ok || !body.token)
-        throw new Error("Pact could not start a session with the companion.");
-      installToken = body.token;
-      await chrome.storage.local.set({ pactInstallToken: installToken });
-    }
-  }
+  await ensureToken(false);
   return installToken ? { Authorization: `Bearer ${installToken}` } : {};
 }
 
@@ -71,17 +78,19 @@ export function combineAbortSignals(
 }
 
 function offlineError() {
-  return new Error(
-    "Can’t reach Pact. Your Pact is saved. In a terminal run: pnpm --filter backend dev",
-  );
+  const dev =
+    (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
+      ? " In a terminal run: pnpm --filter backend dev"
+      : "";
+  return new Error(`Can’t reach Pact right now. Your Pacts are saved.${dev}`);
 }
 
 async function readErrorBody(res: Response): Promise<string> {
   const text = await res.text().catch(() => "");
   if (!text) {
     return res.status === 404
-      ? "Companion route missing. Restart the companion with pnpm server after updating Pact."
-      : `Companion returned HTTP ${res.status}.`;
+      ? "Pact needs an update. Try again in a moment."
+      : "Something went wrong. Try again.";
   }
   try {
     const data = JSON.parse(text) as { error?: string };
@@ -92,50 +101,52 @@ async function readErrorBody(res: Response): Promise<string> {
   return text.slice(0, 240);
 }
 
+async function request(path: string, body: unknown, signal: AbortSignal | undefined, retry: boolean) {
+  const timeout = AbortSignal.timeout(
+    path.includes("/interpret") ? 95000 : path.endsWith("/health") ? 4000 : 15000,
+  );
+  const headers = await authHeaders();
+  const res = await fetch(base + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers:
+      body === undefined
+        ? headers
+        : { "Content-Type": "application/json", ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: combineAbortSignals(signal, timeout),
+  });
+  if (res.status === 401 && retry) {
+    await ensureToken(true);
+    return request(path, body, signal, false);
+  }
+  return res;
+}
+
 export async function api<T>(
   path: string,
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
   try {
-    const timeout = AbortSignal.timeout(
-      path.includes("/interpret") ? 95000 : 15000,
-    );
-    const headers = await authHeaders();
-    const res = await fetch(base + path, {
-      method: body === undefined ? "GET" : "POST",
-      headers:
-        body === undefined
-          ? headers
-          : { "Content-Type": "application/json", ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: combineAbortSignals(signal, timeout),
-    });
+    const res = await request(path, body, signal, true);
     const raw = await res.text();
     let data: any = {};
     if (raw) {
       try {
         data = JSON.parse(raw);
       } catch {
-        if (!res.ok)
-          throw new ApiError(
-            `Companion returned a non-JSON error (HTTP ${res.status}). Restart pnpm server.`,
-            res.status,
-          );
-        throw new ApiError(
-          "Companion returned a non-JSON response. Restart pnpm server.",
-          res.status || 502,
-        );
+        if (!res.ok) throw new ApiError("Something went wrong. Try again.", res.status);
+        throw new ApiError("Something went wrong. Try again.", res.status || 502);
       }
     }
     if (!res.ok)
       throw new ApiError(
         data.error ??
           (res.status === 402
-            ? "AI replies are paused by a credit or local budget limit. Your Pact is saved. Check Settings before retrying."
+            ? "Pact needs a short break. Try again later."
             : res.status === 429
-              ? "Claude’s usage limit was reached. Your Pact is saved; try again later."
-              : `The companion could not complete this request (HTTP ${res.status}).`),
+              ? "Pact is busy right now. Try again in a few minutes."
+              : "Something went wrong. Try again."),
         res.status,
       );
     return data as T;
@@ -272,7 +283,7 @@ async function readStream(
   }
   if (partial.trim()) return { reply: partial };
   throw new ApiError(
-    "Claude’s reply was empty. Check ANTHROPIC_API_KEY or PACT_AI=claude-code, then retry.",
+    "Pact didn't get a reply. Try again.",
     502,
   );
 }

@@ -7,12 +7,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "wxt",
-    "build": "wxt build",
+    "dev": "WXT_PUBLIC_PACT_API=http://localhost:3000 wxt",
+    "build": "WXT_PUBLIC_PACT_API=http://localhost:3000 wxt build",
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "zip": "PACT_STORE_BUILD=1 wxt zip",
-    "zip:release": "wxt zip",
+    "zip:release": "set -a; . ./.env.production; set +a; wxt zip",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

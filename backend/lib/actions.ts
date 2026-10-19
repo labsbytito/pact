@@ -124,7 +124,7 @@ export class ActionStore {
     const json = JSON.stringify(data);
     if (Buffer.byteLength(json) > MAX_BYTES)
       throw new ActionError(
-        "The local action journal is full. No new action was submitted.",
+        "Pact's history is full. Nothing was sent.",
       );
     if (this.adapter) {
       await this.adapter.write(json);
@@ -186,7 +186,7 @@ export class ActionStore {
       this.prune(data);
       if (data.plans.length >= LIMIT)
         throw new ActionError(
-          "The action journal is full. No new proposal was saved.",
+          "Pact's history is full. Nothing was saved.",
         );
       if (input.pactId)
         for (const p of data.plans)
@@ -283,7 +283,7 @@ export class ActionStore {
         (options.contextHash && options.contextHash !== plan.contextHash)
       )
         throw new ActionError(
-          "This proposal belongs to an earlier intention. Review a fresh next step.",
+          "This suggestion is out of date. Ask again for a new one.",
         );
       if (plan.runId) {
         const run = data.runs.find((r) => r.runId === plan.runId);
@@ -297,7 +297,7 @@ export class ActionStore {
       this.prune(data);
       if (data.runs.length >= LIMIT)
         throw new ActionError(
-          "The action journal is full. No new action was submitted.",
+          "Pact's history is full. Nothing was sent.",
         );
       options.validate(plan);
       const run: Run = {

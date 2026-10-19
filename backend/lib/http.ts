@@ -40,7 +40,7 @@ export function json(req: Request, body: unknown, status = 200) {
 export function guardOrigin(req: Request) {
   const origin = req.headers.get("origin");
   if (origin && !originAllowed(origin))
-    return json(req, { error: "This browser origin is not paired with Pact." }, 403);
+    return json(req, { error: "This copy of Pact isn't recognised. Reinstall Pact." }, 403);
   return null;
 }
 

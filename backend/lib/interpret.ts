@@ -175,7 +175,11 @@ async function* chunks(system: string, content: string, images: ClaudeImage[], s
   if (aiMocked()) {
     const raw = mockRaw(latest);
     const reply = raw.split("\n")[0] ?? raw;
-    for (const word of reply.split(" ")) yield { type: "delta" as const, text: `${word} ` };
+    const pace = Number(process.env.PACT_MOCK_PACE_MS || 0);
+    for (const word of reply.split(" ")) {
+      if (pace > 0) await new Promise((resolve) => setTimeout(resolve, pace));
+      yield { type: "delta" as const, text: `${word} ` };
+    }
     yield { type: "done" as const, raw };
     return;
   }
@@ -190,7 +194,7 @@ export async function runInterpretation(options: {
   onDelta?: (text: string) => void;
 }) {
   if (!aiMocked() && !aiReady())
-    throw new AiError("Your Pact is saved. Add a permitted Claude API key to Pact’s companion to get replies.", 503);
+    throw new AiError("Replies are unavailable right now. Your Pact is saved.", 503);
   await options.actions.invalidate(options.pact.id);
   const latest = options.pact.messages.filter((item) => item.role === "user").at(-1)?.text ?? options.pact.intention;
   const packed = payload(options.pact, options.actions, options.tools);

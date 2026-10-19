@@ -1,5 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   OAuthClientInformationMixed,
@@ -9,7 +7,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { NotSubmittedError } from "./actions";
 import { randomBytes } from "node:crypto";
 
-const directory = new URL("../.local/", import.meta.url);
 const endpoint = new URL(process.env.FO_MCP_URL || "https://mcp.api.wajo.ai/fo");
 const DEFAULT_REDIRECT = "http://127.0.0.1:4317/oauth/callback";
 type OauthPending = {
@@ -52,24 +49,32 @@ import { isAuthRejection } from "./fo-auth";
 export { isAuthRejection };
 
 export async function createFoConnection(options: {
-  directory: URL;
+  directory?: URL;
+  /** When set, credentials stay in this store and nothing is written to disk. */
+  load?: () => Promise<string | null>;
+  save?: (json: string) => Promise<void>;
   endpoint?: URL;
   redirectUrl?: string;
-  /** Encrypt the credential file before it hits disk. Tests omit this and stay plaintext. */
+  /** Encrypt before save. Tests omit this and stay plaintext. */
   seal?: (json: string) => Promise<string>;
   open?: (raw: string) => Promise<string>;
   createClient: () => FoClient;
   createTransport: (endpoint: URL, authProvider: OAuthClientProvider) => FoTransport;
 }) {
-  const base = options.directory.href.endsWith("/")
-    ? options.directory
-    : new URL(`${options.directory.href}/`);
-  const file = new URL("fo.json", base);
+  const stored = Boolean(options.load || options.save);
+  if (!stored && !options.directory) throw new Error("Fo storage is not configured");
+  const base = !stored && options.directory
+    ? options.directory.href.endsWith("/")
+      ? options.directory
+      : new URL(`${options.directory.href}/`)
+    : undefined;
+  const file = base ? new URL("fo.json", base) : undefined;
   const target = options.endpoint ?? endpoint;
   const redirect = options.redirectUrl ?? DEFAULT_REDIRECT;
   let saved: Saved = {};
   try {
-    let raw = await readFile(file, "utf8");
+    let raw = options.load ? await options.load() : file ? await readFile(file, "utf8") : null;
+    if (raw == null || raw === "") throw new Error("missing");
     if (options.open) raw = await options.open(raw);
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
@@ -84,6 +89,11 @@ export async function createFoConnection(options: {
     const w = writing.catch(() => {}).then(async () => {
       let json = JSON.stringify(snapshot);
       if (options.seal) json = await options.seal(json);
+      if (options.save) {
+        await options.save(json);
+        return;
+      }
+      if (!base || !file) return;
       await mkdir(base, { recursive: true, mode: 0o700 });
       await writeFile(file, json, { mode: 0o600 });
     });
@@ -369,31 +379,4 @@ export async function createFoConnection(options: {
     }
   }
   return { status, begin, finish, disconnect, call, restore };
-}
-
-const connection = await createFoConnection({
-  directory,
-  endpoint,
-  createClient: () =>
-    new Client({ name: "pact", version: "0.1.0" }) as unknown as FoClient,
-  createTransport: (url, authProvider) =>
-    new StreamableHTTPClientTransport(url, { authProvider }),
-});
-export function foStatus() {
-  return connection.status();
-}
-export function beginFo() {
-  return connection.begin();
-}
-export function finishFo(code: string, returnedState: string) {
-  return connection.finish(code, returnedState);
-}
-export function disconnectFo() {
-  return connection.disconnect();
-}
-export function callFo(name: string, args: Record<string, unknown>) {
-  return connection.call(name, args);
-}
-export function restoreFo() {
-  return connection.restore();
 }

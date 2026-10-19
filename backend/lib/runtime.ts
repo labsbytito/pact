@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
@@ -28,23 +25,13 @@ type Session = {
   fo?: FoConn;
 };
 
-const sessions = new Map<string, Promise<Session>>();
-const root = fileURLToPath(new URL("..", import.meta.url));
-
 async function connectFo(id: string, store: Store, redirectUrl: string): Promise<FoConn> {
-  const directory = new URL(`file://${join(root, ".local", "installs", id)}/`);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const sealed = await store.get(`fo:${id}`);
-  if (sealed) await writeFile(new URL("fo.json", directory), sealed, { mode: 0o600 });
   const key = foKeyBytes();
   return createFoConnection({
-    directory,
+    load: () => store.get(`fo:${id}`),
+    save: (json) => store.set(`fo:${id}`, json),
     redirectUrl,
-    seal: async (json) => {
-      const hidden = encryptString(json, key);
-      await store.set(`fo:${id}`, hidden);
-      return hidden;
-    },
+    seal: async (json) => encryptString(json, key),
     open: (raw) => Promise.resolve(decryptString(raw, key)),
     createClient: () => new Client({ name: "pact", version: "0.2.0" }) as never,
     createTransport: (url, authProvider) =>
@@ -52,30 +39,22 @@ async function connectFo(id: string, store: Store, redirectUrl: string): Promise
   });
 }
 
+/** Fresh journal, threads, and Fo tokens on every call. Nothing is cached in memory or written to disk. */
 export async function sessionFor(installId: string, req?: Request) {
   const store = openStore();
-  let pending = sessions.get(installId);
-  if (!pending) {
-    pending = (async () => {
-      const directory = new URL(`file://${join(root, ".local", "installs", installId)}/`);
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      const actions = await ActionStore.load(
-        join(root, ".local", "installs", installId, "actions.json"),
-        {
-          read: () => store.get(`journal:${installId}`),
-          write: (json) => store.set(`journal:${installId}`, json),
-        },
-        { keepRunning: true },
-      );
-      const threads = await Threads.open(directory);
-      const fo = foMocked()
-        ? undefined
-        : await connectFo(installId, store, `${publicBase(req)}/api/fo/callback`);
-      return { id: installId, actions, threads, fo };
-    })();
-    sessions.set(installId, pending);
-  }
-  return pending;
+  const actions = await ActionStore.load(
+    "store://journal",
+    {
+      read: () => store.get(`journal:${installId}`),
+      write: (json) => store.set(`journal:${installId}`, json),
+    },
+    { keepRunning: true },
+  );
+  const threads = await Threads.openStore(store, `threads:${installId}`);
+  const fo = foMocked()
+    ? undefined
+    : await connectFo(installId, store, `${publicBase(req)}/api/fo/callback`);
+  return { id: installId, actions, threads, fo };
 }
 
 export function toolsFor(session: Session): FoTool[] {
@@ -232,6 +211,5 @@ export async function verifyModel() {
 }
 
 export function resetSessions() {
-  sessions.clear();
   modelCache = undefined;
 }

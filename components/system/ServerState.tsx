@@ -19,7 +19,7 @@ export function ServerState({
   const copy = {
     offline: ["Can’t reach Pact", "Your Pacts are still saved on this computer."],
     limited: ["Pact needs a short break", "Try again in a little while."],
-    unconfigured: ["Pact isn’t configured", model ? `The model ${model} isn’t ready.` : "Add a Claude key on the companion."],
+    unconfigured: ["Pact isn’t ready yet", dev && model ? `The model ${model} isn’t ready.` : "The Pact service is being set up. Try again soon."],
     fo: ["Connect Fo", "Fo runs the request after you approve it."],
   }[kind];
   return (

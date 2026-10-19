@@ -3,13 +3,42 @@ import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-const usageFile = new URL("../.local/ai-usage.json", import.meta.url);
-// Reserved spend only ever grows; a missing or unreadable file never resets it to a fresh budget silently.
+import { localPath } from "./paths";
+import { diskForbidden, openStore } from "./store";
+const usageFile = localPath("ai-usage.json");
 let spent = 0;
-try {
-  spent = Number(JSON.parse(await readFile(usageFile, "utf8")).reserved) || 0;
-} catch {}
 let reservationQueue: Promise<unknown> = Promise.resolve();
+
+function usageOnStore() {
+  return (
+    diskForbidden() ||
+    Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  );
+}
+
+async function readSpent() {
+  if (usageOnStore()) {
+    const raw = await openStore().get("ai:usage");
+    return Number(raw ? JSON.parse(raw).reserved : 0) || 0;
+  }
+  try {
+    return Number(JSON.parse(await readFile(usageFile, "utf8")).reserved) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function writeSpent(next: number, cap: number) {
+  const body = JSON.stringify({ reserved: next, cap });
+  if (usageOnStore()) {
+    await openStore().set("ai:usage", body);
+    return;
+  }
+  await mkdir(localPath(), { recursive: true, mode: 0o700 });
+  const temp = localPath(`ai-usage.${randomUUID()}.tmp`);
+  await writeFile(temp, body, { mode: 0o600 });
+  await rename(temp, usageFile);
+}
 
 // An error whose message is safe and actionable to show the user as-is.
 export class AiError extends Error {
@@ -58,6 +87,7 @@ export function aiStatus() {
 export async function reserveBudget() {
   const { perRequest, cap } = limits();
   const task = reservationQueue.then(async () => {
+    spent = await readSpent();
     if (
       !Number.isFinite(cap) ||
       !Number.isFinite(perRequest) ||
@@ -68,19 +98,8 @@ export async function reserveBudget() {
         "The local prototype AI budget is reached, so Pact paused AI replies. Your Pact is saved.",
         402,
       );
-    await mkdir(new URL("../.local/", import.meta.url), {
-      recursive: true,
-      mode: 0o700,
-    });
-    const temp = new URL(
-      `ai-usage.${randomUUID()}.tmp`,
-      new URL("../.local/", import.meta.url),
-    );
     const next = spent + perRequest;
-    await writeFile(temp, JSON.stringify({ reserved: next, cap }), {
-      mode: 0o600,
-    });
-    await rename(temp, usageFile);
+    await writeSpent(next, cap);
     spent = next;
     return perRequest;
   });
@@ -213,7 +232,7 @@ export async function askClaude(
           system,
         ],
         {
-          cwd: new URL("../.local/", import.meta.url),
+          cwd: localPath(),
           stdio: ["pipe", "pipe", "pipe"],
         },
       );

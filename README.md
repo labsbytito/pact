@@ -19,6 +19,8 @@ In another terminal:
 pnpm dev
 ```
 
+`pnpm dev` and `pnpm build` always talk to `http://localhost:3000`. The production URL is only the `WXT_PUBLIC_PACT_API` line in `.env.production`, and only `pnpm zip:release` reads it.
+
 Load `.output/chrome-mv3` from `chrome://extensions` with Developer mode on. Open an ordinary webpage and click the Pact icon.
 
 The backend starts in demo mode when you set both of these:
@@ -35,16 +37,39 @@ For a live Claude reply, leave `PACT_AI` unset and put your key only on the back
 ANTHROPIC_API_KEY=your_key ANTHROPIC_MODEL=claude-sonnet-5-5 pnpm --filter backend dev
 ```
 
-Fo sign-in is **Settings → Connections → Connect Fo**. The callback is `http://localhost:3000/api/fo/callback`. Tokens stay encrypted under `backend/.local/`.
+Fo sign-in is **Settings → Connections → Connect Fo**. The local callback is `http://localhost:3000/api/fo/callback`. Tokens stay encrypted under `backend/.local/`.
 
 ## Deploy the backend on Vercel
 
-1. Import this repo.
-2. Set the root directory to `backend`.
-3. Add the variables from `backend/.env.example`. `FO_TOKEN_ENC_KEY` is 32 bytes, base64. `PUBLIC_BASE_URL` is the Vercel URL. `ALLOWED_EXTENSION_IDS` stays `iogfficoaeonclfkgdjfgfdiofdjcbnn` for the unpacked release.
-4. Deploy.
+The app Vercel builds is `backend/` (Next.js App Router). `pnpm --filter backend build` runs `next build`.
 
-If the Vercel URL is not `https://pact.vercel.app`, change `WXT_PUBLIC_PACT_API` in `.env.production` before building the zip.
+1. Import this GitHub repo in Vercel.
+2. Set **Root Directory** to `backend`. Framework preset: **Next.js**. Build command: `next build` (the `build` script). Leave the output as the Next.js default.
+3. Create a Redis database in [Upstash](https://upstash.com) (or the Vercel Marketplace Upstash integration) and copy its **REST URL** and **REST token**. Production stores install tokens, Fo sessions, and rate limits there. The filesystem store is only for a local machine.
+4. Add these environment variables for Production. Names match `backend/.env.example`. Do not commit the values.
+
+| Name | Value |
+| --- | --- |
+| `INSTALL_TOKEN_SECRET` | Long random string. `openssl rand -base64 32` |
+| `FO_TOKEN_ENC_KEY` | `openssl rand -base64 32`. It must decode to exactly 32 bytes. |
+| `ANTHROPIC_API_KEY` | Claude API key used for live replies |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` |
+| `PUBLIC_BASE_URL` | `https://<your-deployment-host>` with no trailing slash |
+| `ALLOWED_EXTENSION_IDS` | `iogfficoaeonclfkgdjfgfdiofdjcbnn` |
+| `UPSTASH_REDIS_REST_URL` | Upstash REST URL |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |
+
+Leave `PACT_AI` and `FO_MODE` unset. Vercel sets `VERCEL_ENV=production`, and that environment refuses mocks. Leave `PACT_FO_CONSEQUENTIAL` unset so Pact only proposes `ask_fo` and Fo reads.
+
+5. Deploy.
+
+The Fo OAuth callback is exactly:
+
+`https://<your-deployment-host>/api/fo/callback`
+
+That is `${PUBLIC_BASE_URL}/api/fo/callback`. Fo redirects the browser there after **Connect Fo**. `PUBLIC_BASE_URL` and this callback must be the same host.
+
+`.env.production` holds one placeholder, `WXT_PUBLIC_PACT_API=https://pact.vercel.app`, until the real deployment URL exists. Change that single line, then run `pnpm zip:release` again. The release script reads `.env.production` and bakes that URL into the extension.
 
 ## Extension for judges
 

@@ -1,4 +1,5 @@
 import { PactBlob } from "../companion/PactBlob";
+import { ArrowLeftIcon, ListIcon, SettingsIcon } from "../icons";
 import type { CompanionAppearance } from "../../lib/character";
 import type { BlobState } from "../../lib/pact-blob";
 
@@ -10,6 +11,7 @@ export function PactHeader({
   appearance,
   demo,
   onBack,
+  onList,
   onSettings,
   glass,
 }: {
@@ -20,21 +22,33 @@ export function PactHeader({
   appearance?: CompanionAppearance;
   demo?: boolean;
   onBack?: () => void;
+  onList?: () => void;
   onSettings: () => void;
   glass?: boolean;
 }) {
   return (
     <header className={glass ? "topbar glass" : "topbar"}>
-      {onBack && <button className="icon-btn" type="button" aria-label="Back" onClick={onBack}>←</button>}
+      {onBack && (
+        <button className="icon-btn" type="button" aria-label="Back" onClick={onBack}>
+          <ArrowLeftIcon />
+        </button>
+      )}
       <div className="brand">
         <PactBlob state={state} size={24} live={live} appearance={appearance} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1>{title}</h1>
-          <p className="step-caption">{caption}</p>
+          {caption && <p className="step-caption">{caption}</p>}
         </div>
       </div>
       {demo && <span className="demo-tag">Demo mode</span>}
-      <button className="icon-btn" type="button" aria-label="Settings" onClick={onSettings}>⚙</button>
+      {onList && (
+        <button className="icon-btn" type="button" aria-label="Pacts" onClick={onList}>
+          <ListIcon />
+        </button>
+      )}
+      <button className="icon-btn" type="button" aria-label="Settings" onClick={onSettings}>
+        <SettingsIcon />
+      </button>
     </header>
   );
 }
