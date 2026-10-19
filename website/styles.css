@@ -110,3 +110,11 @@ html{scroll-behavior:auto;scroll-padding-top:112px}
 @media(max-width:1100px){.connection-art{padding:30px 0 64px}.cmap{width:min(100%,440px)}}
 .note-right .source-line{justify-content:flex-start;align-items:center}
 @media print{[data-reveal]{opacity:1!important;translate:none!important}}
+
+[hidden]{display:none!important}
+.release-box .button{margin:8px 0 6px}
+.release-box #release-note{margin-bottom:14px}
+.release-box .text-link{display:inline-block;margin:10px 0 0}
+#release-meta{display:block;margin-top:18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;line-height:1.6;color:#6b6762;overflow-wrap:anywhere}
+.install-guide ol{gap:34px}
+.install-grid{align-items:start}
