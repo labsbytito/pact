@@ -1,76 +1,62 @@
 # Pact
 
-**A little intention. A real next step.**
+**Talk it through with Claude. Let Fo do the next step. You approve everything.**
 
-Pact is a conversational Chrome side-panel companion for turning web discoveries into action. Read a page when you choose, talk through an intention, save a Pact, and review a concrete request before Fo receives it.
+Pact is a Chrome side-panel companion. Open any page and ask about it — articles, GitHub, YouTube (with captions), even PDFs. Attach files, dictate, keep your chats. When a conversation turns into a task ("hold Saturday and tell Sam"), Pact proposes the exact request, and **nothing leaves your browser until you press Approve**. [Fo](https://wajo.ai) then carries it out across the tools you've connected: Gmail, Calendar, Drive, Slack, Figma, Notion, GitHub, and any MCP server.
 
-## Run locally
+<p align="center"><img src="docs/screens/hero-proposal.png" width="320" alt="Pact proposing a calendar hold and email draft, waiting for approval"></p>
 
-Requires Node 22+ and pnpm. This is a local hackathon prototype; the companion is not a multi-user hosted service.
+## Try it (about a minute)
+
+1. **Download** the latest [`pact-judges.zip`](https://github.com/labsbytito/pact-for-chrome/releases/latest) (also on the [website](https://withpact.vercel.app)).
+2. **Unzip it** and keep the folder somewhere permanent.
+3. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**, and choose the unzipped folder (the one containing `manifest.json`).
+4. Pin Pact, open any web page, click the icon.
+
+No terminal, API key or local server needed — the extension talks to the hosted backend. Chrome only allows one-click installs from the Web Store; a Store listing is planned.
+
+To act on real accounts, open **Settings → Connections → Connect Fo** and sign in with your own Fo account.
+
+## What it does
+
+| | |
+|---|---|
+| **Reads the web** | Page text, selections, a picked element, YouTube captions, PDFs (extracted locally with pdf.js) |
+| **Chats** | Streaming Claude replies, Markdown, copy / retry / edit, files and images (drag, paste or +), dictation |
+| **Remembers** | Pacts: pin, rename, archive, export as Markdown, delete (removes file contents) |
+| **Acts safely** | Proposed request → you approve → Fo runs it → Pact shows the status Fo returned, never a guess |
+| **Feels alive** | Companion characters that blink, glance, think, listen and settle |
+
+## How it's built
+
+```
+extension (WXT + React, MV3)  ──HTTPS──▶  backend (Next.js on Vercel)  ──▶  Claude API
+   side panel · page reader               install tokens · rate limits         │
+   local chat storage                     daily AI budget · encrypted Fo       └─▶  Fo (MCP over OAuth)
+```
+
+- `entrypoints/`, `components/`, `hooks/`, `lib/` — the extension. Chats and files stay in `chrome.storage.local`.
+- `backend/` — stateless API: per-install tokens, per-IP and per-install rate limits, a daily spend cap, AES-encrypted Fo credentials, an action journal with idempotency, and a policy layer that gates anything consequential.
+- `website/` — the static marketing site and download page (`release.json` controls the download button).
+- `scripts/` — `live-smoke.mjs` (verifies the live backend end to end), `release.mjs` (build, package, publish the ZIP), `package-judges.mjs`.
+
+## Safety, plainly
+
+- Nothing is sent to Fo without an approval click, except plain research you explicitly asked for.
+- Page access uses Chrome's `activeTab` plus a one-time per-site permission you grant. Restricted pages are never read.
+- It's open source, so you can read exactly what the backend does. It only accepts requests from this extension's ID, and Fo credentials are stored encrypted.
+
+## Develop
+
+Node 20+ and pnpm.
 
 ```sh
 pnpm install
-pnpm build
-pnpm server
+pnpm --filter backend dev      # backend on :3000 (demo mode works without keys)
+pnpm dev                       # extension, hot reload
+pnpm check && pnpm test        # types and 140+ tests
+node scripts/live-smoke.mjs    # verify the hosted backend
+node scripts/release.mjs --verified   # build and stage the download (after a passing smoke test)
 ```
 
-In Chrome, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `.output/chrome-mv3`. Open an ordinary webpage and click the Pact toolbar icon to grant access. **Read current page** refreshes what is visible, including within an existing Pact. **Select item** highlights an item without activating its links or buttons; Escape cancels. Highlighted text can also be shared through **Make a Pact from selection** in Chrome's context menu. Chrome internal pages and the Web Store cannot be captured.
-
-For visual preview, serve `.output/chrome-mv3` on `http://127.0.0.1:5173` and open `/sidepanel.html`. A normal web preview cannot read other tabs; page capture needs the extension.
-
-### Intelligence
-
-Choose a permitted Claude API key on the companion, never in the extension:
-
-```sh
-ANTHROPIC_API_KEY=your_key ANTHROPIC_MODEL=your_model pnpm server
-```
-
-For **local development/testing only**, an opt-in adapter can use an already signed-in Claude Code CLI without reading or copying its credentials:
-
-```sh
-PACT_AI=claude-code PACT_CLAUDE_MODEL=claude-sonnet-5-5 PACT_AI_REQUEST_CAP=0.10 PACT_AI_SESSION_CAP=3 pnpm server
-```
-
-The CLI adapter disables all tools and MCP servers. It reserves the full per-request cap conservatively in `.local/ai-usage.json` and refuses further requests at the total cap, including after restarts. Each message can use existing API credit. It is not a production inference service or an entitlement to use restricted credits outside their terms. No account balance is assumed by the application.
-
-### Fo
-
-Choose **Settings → Connections → Connect Fo → Continue to Wajo**. Authenticate using Wajo's own page. Pact uses SDK-backed OAuth PKCE and dynamic public-client registration. Its callback is `http://127.0.0.1:4317/oauth/callback`. Access and refresh tokens stay in the ignored, owner-readable `.local/` directory; no Wajo password is collected.
-
-Fo is optional for saving Pacts and chatting. The local companion must be running for AI and Fo. Connecting or disconnecting does not remove saved Pacts.
-
-## What is implemented
-
-- React / TypeScript / WXT Manifest V3 side panel; original CSS companion, responsive layout and reduced motion.
-- Invocation-based active-tab capture, source inspection, selected text, video position, available YouTube captions and explicit transcript failure.
-- Persistent local Pact conversations, next-step proposals, archived Pacts and preserved action history.
-- Claude interpretation with bounded conversation/transcript context that prioritizes the current video moment.
-- Live Fo tool discovery, schema-validated requests, exact request review, single-use idempotent approval and durable run journal.
-- Polling of long-running Fo replies; private per-Pact conversation handles; uncertain outcomes stay uncertain across restarts.
-- Optional editable speech dictation where Chrome supports it.
-- Persistent original characters per Pact, with collision avoidance for shape/color pairs, plus restrained glass controls and readable opaque messages.
-- Explicit viewport/selection context, tab/window/navigation guards, capture freshness, and automatic reopening of the last active Pact.
-- Fo question/reply continuity, actual prior Fo replies available to interpretation, concise conversation defaults and expandable full results.
-
-## Live verification
-
-On 18 October 2026, the installed extension captured the visible lower section of a long test page and selected the intended item without activating its button. Escape cancellation was checked in the installed build. Wikipedia, Reddit and YouTube metadata/playback capture were also tested; YouTube speech availability remains variable.
-
-The real interface sent reviewed public research to Fo, displayed the returned British Museum visit information, then sent a follow-up for the official accessibility URL in the same Pact. Reload recovery and retained action history were checked. No booking, payment, account creation or external message was tested. Claude Code's separate Fo MCP login was authenticated and its read-only tool call succeeded. See [RUN-TRACE.md](RUN-TRACE.md).
-
-## Honest limits
-
-Caption extraction depends on YouTube availability and page structure. Missing speech is disclosed. The companion's tool list reflects what the linked Fo account exposes; it does not guarantee bookings, payments or messaging work. A Fo reply is displayed as a reply, not proof that every requested task completed. Interrupted actions are never retried automatically.
-
-The current local prototype is single-user. Chrome permissions include `activeTab`, `scripting`, `storage`, `sidePanel`, `identity`, plus the loopback companion host. No browsing-history permission or all-sites host access is requested. Page context is shared with Claude when a message is sent; Fo receives an approved task. Direct web content is treated as untrusted context.
-
-## Verify
-
-```sh
-pnpm check
-pnpm test
-pnpm build
-```
-
-The tests cover duplicate approvals, lost responses, restart recovery, uncertainty, schema rejection, action history, transcript/conversation budgets, and Fo progress polling. See [PACT.md](PACT.md), [DESIGN.md](DESIGN.md), and [FO-INTEGRATION.md](FO-INTEGRATION.md).
+More: [PACT.md](PACT.md) · [docs/DESIGN-SOURCE.md](docs/DESIGN-SOURCE.md) · [docs/FO-INTEGRATION.md](docs/FO-INTEGRATION.md) · [docs/FUNCTIONALITY-HANDOFF.md](docs/FUNCTIONALITY-HANDOFF.md)

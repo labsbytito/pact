@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Try Pact in your browser</title>
+<meta name="description" content="Try the real Pact panel without installing anything. Chat with Claude, attach files, and see the approval flow.">
+<link rel="icon" href="../assets/pact.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:Inter;src:url('../assets/inter.woff2') format('woff2');font-weight:100 900;font-display:swap}
+@font-face{font-family:Garamond;src:url('../assets/editorial.woff2') format('woff2');font-display:swap}
+@font-face{font-family:Garamond;font-style:italic;src:url('../assets/editorial-italic.woff2') format('woff2');font-display:swap}
+*{box-sizing:border-box}body{margin:0;background:#f2f0eb;color:#292827;font:16px/1.55 Inter,system-ui,sans-serif;min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto;padding:22px 24px}
+header a{color:inherit;text-decoration:none;font-size:14px}.brand{display:flex;gap:8px;align-items:center;font-size:20px;font-weight:600;letter-spacing:-.03em}
+main{max-width:1100px;margin:0 auto;padding:12px 24px 64px;display:grid;grid-template-columns:1fr 440px;gap:64px;align-items:center}
+h1{font:400 clamp(40px,5vw,64px)/1.02 Garamond,Georgia,serif;letter-spacing:-.03em;margin:0 0 18px}h1 em{color:#421d24}
+p{margin:0 0 16px;max-width:46ch;color:#4a4744}ul{padding-left:18px;margin:0 0 26px;color:#4a4744}li{margin:6px 0}
+.btn{display:inline-flex;gap:8px;align-items:center;padding:13px 22px;border-radius:12px;border:2px solid #1a1a1a;background:#f0d7ff;color:#1a1a1a;font-weight:500;text-decoration:none}
+.btn.ghost{background:transparent;margin-left:10px}
+.frame{width:420px;height:780px;max-width:100%;border-radius:34px;overflow:hidden;background:#fff;border:1px solid #29282722;box-shadow:0 40px 80px -40px #421d2477,0 0 0 8px #ffffff66}
+iframe{display:block;width:100%;height:100%;border:0}
+small{display:block;margin-top:18px;color:#6b6762;font-size:12px;max-width:52ch}
+@media(max-width:960px){main{grid-template-columns:1fr;gap:32px}.frame{margin:0 auto;height:720px}}
+</style>
+</head>
+<body>
+<header><a class="brand" href="../"><img src="../assets/pact.svg" width="26" height="26" alt="">pact.</a><a href="../#install">Install the extension ↗</a></header>
+<main>
+<section>
+<h1>Try Pact,<br><em>no install.</em></h1>
+<p>This is the real side panel, running in your browser against the live backend. Ask Claude something, attach a file, rename and archive chats, change the companion.</p>
+<ul><li>Chat, files, dictation, history and settings all work here.</li><li>Reading the page you're on, PDFs and video captions need the Chrome extension.</li><li>Connect Fo in Settings to see the approval flow with your own tools.</li></ul>
+<a class="btn" href="../#install">Get the Chrome extension ↗</a><a class="btn ghost" href="../">Back to the site</a>
+<small>Your chats stay in this browser. A shared daily AI budget keeps the demo free; if it's busy, try again in a little while.</small>
+</section>
+<div class="frame"><iframe src="app.html" title="Pact side panel demo" allow="microphone"></iframe></div>
+</main>
+</body>
+</html>

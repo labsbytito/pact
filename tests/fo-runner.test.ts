@@ -4,8 +4,8 @@ import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createFoRunner, Threads } from "../server/fo-task";
-import { ActionStore, NotSubmittedError } from "../server/actions";
+import { createFoRunner, Threads } from "../backend/lib/fo-task";
+import { ActionStore, NotSubmittedError } from "../backend/lib/actions";
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const dir = await mkdtemp(join(tmpdir(), "pact-fo-"));

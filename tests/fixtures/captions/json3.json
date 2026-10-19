@@ -1,0 +1,24 @@
+{
+  "wireMagic": "pb3",
+  "events": [
+    {
+      "tStartMs": 1250,
+      "dDurationMs": 2010,
+      "segs": [{ "utf8": "The town " }, { "utf8": "is " }, { "utf8": "Kanazawa." }]
+    },
+    {
+      "tStartMs": 4000,
+      "dDurationMs": 400,
+      "segs": [{ "utf8": "\n" }]
+    },
+    {
+      "tStartMs": 8600,
+      "dDurationMs": 1800,
+      "segs": [{ "utf8": "Visit the garden next year." }]
+    },
+    {
+      "aAppend": 1,
+      "segs": [{ "utf8": " Bring a coat." }]
+    }
+  ]
+}

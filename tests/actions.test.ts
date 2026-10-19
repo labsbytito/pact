@@ -7,7 +7,7 @@ import {
   ActionStore,
   validateToolArguments,
   type Run,
-} from "../server/actions";
+} from "../backend/lib/actions";
 
 const input = {
   title: "Request details",
@@ -207,11 +207,11 @@ test("source/intent binding mismatch rejects approval and new proposal supersede
   };
   await assert.rejects(
     store.approve(plan.planId, { ...options, contextHash: "b".repeat(64) }),
-    /earlier intention/,
+    /out of date/,
   );
   await assert.rejects(
     store.approve(plan.planId, { ...options, pactId: "different-pact" }),
-    /earlier intention/,
+    /out of date/,
   );
   await store.propose({ ...input, contextHash: "c".repeat(64) });
   await assert.rejects(

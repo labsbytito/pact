@@ -1,0 +1,152 @@
+import { ArrowUp, Mic, Plus, Square, X, Paperclip } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import { ATTACHMENT_LIMITS, prepareAttachment, type Attachment } from "../../lib/attachments";
+import "./attachments.css";
+
+export function Composer({
+  value,
+  attachments = [],
+  onAttachments,
+  onChange,
+  onSend,
+  onStop,
+  streaming,
+  onRead,
+  onDictate,
+  sendWithEnter = true,
+}: {
+  value: string;
+  attachments?: Attachment[];
+  onAttachments?: (files: Attachment[]) => void;
+  onChange: (value: string) => void;
+  onSend: () => void;
+  onStop: () => void;
+  streaming: boolean;
+  onRead: () => void;
+  onDictate: () => void;
+  sendWithEnter?: boolean;
+}) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  const [menu, setMenu] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // A file dropped anywhere else would make Chrome navigate the panel to it.
+    const stop = (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => { window.removeEventListener("dragover", stop); window.removeEventListener("drop", stop); };
+  }, []);
+  useEffect(() => {
+    // The transcript keeps clear of the composer however tall it grows (attachments, notes, multi-line text).
+    const el = wrap.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const sync = () => root.style.setProperty("--composer-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => { observer.disconnect(); root.style.removeProperty("--composer-h"); };
+  }, []);
+  async function attach(files: File[]) {
+    if (files.length + attachments.length > ATTACHMENT_LIMITS.maxFiles) { setError("Attach up to 3 files at a time."); return; }
+    setPreparing(true); setError("");
+    try {
+      const prepared = await Promise.all(files.map(prepareAttachment));
+      onAttachments?.([...attachments, ...prepared]);
+    } catch (e) { setError(e instanceof Error ? e.message : "That file could not be read."); }
+    finally { setPreparing(false); }
+  }
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, 126);
+    el.style.height = `${next}px`;
+    el.form?.toggleAttribute("data-multiline", next > 56);
+  }, [value]);
+  return (
+    <div
+      ref={wrap}
+      className="composer-wrap"
+      data-dragging={dragging || undefined}
+      onDragEnter={(event) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); depth.current += 1; setDragging(true); }}
+      onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+      onDragLeave={() => { depth.current = Math.max(0, depth.current - 1); if (!depth.current) setDragging(false); }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault(); depth.current = 0; setDragging(false);
+        if (streaming || preparing) { setError("Wait for the current reply before attaching files."); return; }
+        void attach(Array.from(event.dataTransfer.files));
+      }}
+    >
+      {dragging && <div className="drop-hint" aria-hidden="true">Drop to attach</div>}
+      <input ref={picker} type="file" multiple accept={ATTACHMENT_LIMITS.accept} hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void attach(files); }} />
+      {attachments.length > 0 && <div className="attachment-list">{attachments.map((file) => <span className="attachment-chip" key={file.id}><Paperclip size={13} aria-hidden="true" /><span>{file.name}</span><button type="button" aria-label={`Remove ${file.name}`} disabled={preparing || streaming} onClick={() => onAttachments?.(attachments.filter((item) => item.id !== file.id))}><X size={13} /></button></span>)}</div>}
+      {preparing && <p className="conn-note" role="status">Reading files…</p>}
+      {error && <p className="conn-note" role="alert">{error}</p>}
+      {!!attachments.length && <p className="attachment-privacy">Files go to Claude with this chat. Saved on this device; deleting the chat removes its file contents.</p>}
+
+      {menu && (
+        <div className="menu glass" role="menu">
+          <button type="button" role="menuitem" disabled={preparing || streaming} onClick={() => { setMenu(false); picker.current?.click(); }}>Attach file</button>
+          <button type="button" role="menuitem" onClick={() => { setMenu(false); onRead(); }}>Read this page</button>
+        </div>
+      )}
+      <form
+        className="composer glass"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!streaming && !preparing) onSend();
+        }}
+      >
+        <button className="icon-btn composer-tool plus" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+        <textarea
+          ref={box}
+          rows={1}
+          value={value}
+          placeholder="Message Pact"
+          aria-label="Message Pact"
+          onChange={(event) => onChange(event.target.value)}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files);
+            if (!files.length || streaming || preparing || event.clipboardData.getData("text/plain")) return;
+            event.preventDefault();
+            void attach(files);
+          }}
+          onKeyDown={(event) => {
+            const command = event.metaKey || event.ctrlKey;
+            if (event.key !== "Enter" || event.shiftKey || streaming || preparing || event.nativeEvent.isComposing) return;
+            if (sendWithEnter && !command) {
+              event.preventDefault();
+              onSend();
+            } else if (!sendWithEnter && command) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+        />
+        <button className="icon-btn composer-tool mic" type="button" aria-label="Dictate" onClick={onDictate}>
+          <Mic size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+        {streaming ? (
+          <button className="send stop" type="button" aria-label="Stop" onClick={onStop}>
+            <Square size={10} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+          </button>
+        ) : (
+          <button className="send" type="submit" aria-label="Send" disabled={preparing || (!value.trim() && !attachments.length)}>
+            <ArrowUp size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
+        )}
+      </form>
+    </div>
+  );
+}
+

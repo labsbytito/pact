@@ -1,0 +1,162 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-feature-settings: "ss01", "cv11", "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+h2, h3, .settings-body h2, .server h2 {
+  letter-spacing: -0.01em;
+}
+button, a, .card, .group, .bubble, .chip, .ask-chip, .tool-tile, .list-row, .send, .float-btn, .icon-btn, .swatch, .shape-btn, .menu-trigger {
+  transition: background-color 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+a { color: var(--accent); }
+.app {
+  height: 100%;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+}
+.app::before,
+.app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.app::before {
+  background:
+    radial-gradient(70% 42% at 92% 100%, var(--wash-glow) 0%, transparent 68%),
+    linear-gradient(180deg, var(--wash-a) 0%, color-mix(in srgb, var(--wash-a) 35%, var(--wash-d)) 28%, var(--wash-d) 55%, var(--wash-d) 100%);
+}
+.app::after {
+  opacity: 0.02;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 180px 180px;
+}
+:root[data-bg="plain"] .app::before,
+:root[data-bg="plain"] .app::after { opacity: 0; }
+.app > * { position: relative; z-index: 1; }
+.float-bar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  pointer-events: none;
+}
+.float-bar > * { pointer-events: auto; }
+.float-actions { display: flex; gap: 4px; }
+.float-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.float-btn:hover { background: var(--fill-hover); }
+.name-pill {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  height: 32px;
+  max-width: calc(100% - 88px);
+  padding: 0 12px 0 6px;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+}
+.name-pill h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.icon-btn:hover { background: var(--fill-hover); }
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 56px 16px 16px;
+  overflow-x: hidden;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 48px);
+}
+.app.with-composer .scroll { padding-bottom: calc(var(--composer-h, 66px) + 110px); }
+.pane { flex: 1 0 auto; display: flex; flex-direction: column; }
+.pane > .empty, .pane > .settings, .pane > .server { flex: 1; min-height: 0; }
+.dock { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4; }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.brand h1 { flex: 1; }
+.step-caption {
+  margin: 0;
+  min-height: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.demo-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border-radius: var(--r-control);
+  padding: 4px 8px;
+}
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

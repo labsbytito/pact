@@ -1,6 +1,14 @@
 import type { Pact, Source, Action } from "./model";
+import {
+  wireAttachments,
+  type Attachment,
+} from "./attachments";
 // Keep the complete local history; only send the context needed for this reply.
-export function interpretationContext(pact: Pact) {
+export function interpretationContext(
+  pact: Pact,
+  attachments: readonly Attachment[] = [],
+  prefs?: { responseStyle?: "short" | "detailed"; askBefore?: "suggested" | "always" },
+) {
   let source: Source | undefined;
   if (pact.source) {
     const s = pact.source;
@@ -28,7 +36,7 @@ export function interpretationContext(pact: Pact) {
       selectionLabel: s.selectionLabel?.slice(0, 80),
       title: s.title.slice(0, 1000),
       description: s.description.slice(0, 4000),
-      text: s.text.slice(0, 12000),
+      text: s.text.slice(0, s.description.startsWith("PDF ·") ? 22000 : 12000),
       selection: s.selection.slice(0, 4000),
       transcript: [...unique.values()].sort((a, b) => a.start - b.start),
       transcriptPartial:
@@ -37,7 +45,11 @@ export function interpretationContext(pact: Pact) {
         candidates.some((line) => line.text.length > 1000),
     };
   }
+  const recentFiles = pact.messages.slice(-24).flatMap((m) => m.attachments ?? []).slice(-3);
+  const wired = wireAttachments(attachments.length ? attachments : recentFiles).slice(0, 3);
   const payload = {
+    responseStyle: prefs?.responseStyle === "short" ? "short" as const : "detailed" as const,
+    askBefore: prefs?.askBefore === "always" ? "always" as const : "suggested" as const,
     pact: {
       id: pact.id,
       intention: pact.intention.slice(0, 8000),
@@ -45,13 +57,15 @@ export function interpretationContext(pact: Pact) {
       messages: pact.messages
         .slice(-24)
         .map((m) => ({ role: m.role, text: m.text.slice(0, 8000) })),
+      attachments: wired,
     },
   };
+  const targetBytes = Math.min(2_000_000, 240000 + new TextEncoder().encode(JSON.stringify(wired)).length);
   const bytes = () => new TextEncoder().encode(JSON.stringify(payload)).length;
-  while (bytes() > 240000 && payload.pact.messages.length > 1)
+  while (bytes() > targetBytes && payload.pact.messages.length > 1)
     payload.pact.messages.shift();
-  if (bytes() > 240000 && source) source.text = source.text.slice(0, 4000);
-  while (bytes() > 240000 && source && source.transcript.length) {
+  if (bytes() > targetBytes && source) source.text = source.text.slice(0, 4000);
+  while (bytes() > targetBytes && source && source.transcript.length) {
     const farthest = source.transcript.reduce(
       (best, line, i, all) =>
         Math.abs(line.start - (source!.videoTime ?? 0)) >
@@ -70,7 +84,7 @@ export function interpretationContext(pact: Pact) {
       "selectionContext",
       "viewportText",
     ] as const) {
-      while (bytes() > 240000 && (source[key]?.length ?? 0) > 100) {
+      while (bytes() > targetBytes && (source[key]?.length ?? 0) > 100) {
         source[key] = source[key]!.slice(
           0,
           Math.floor(source[key]!.length / 2),
@@ -79,6 +93,7 @@ export function interpretationContext(pact: Pact) {
       }
     }
   }
+  if (bytes() > 2_000_000) throw new Error("These files are too large together. Remove a file and send again.");
   return payload;
 }
 export function unresolved(action?: Action) {
@@ -100,6 +115,7 @@ export function mergeReply(
   result: {
     reply: string;
     title?: string;
+    stopped?: boolean;
     action?: {
       title: string;
       instruction: string;
@@ -107,6 +123,7 @@ export function mergeReply(
       toolName: string;
       arguments: Record<string, unknown>;
       expiresAt?: string;
+      consequential?: boolean;
     };
   },
   id: string,
@@ -114,10 +131,16 @@ export function mergeReply(
 ): Pact {
   let next = {
     ...pact,
-    title: result.title ?? pact.title,
+    title: pact.titleSource === "manual" ? pact.title : result.title ?? pact.title,
     messages: [
       ...pact.messages,
-      { id, at, role: "assistant" as const, text: result.reply },
+      {
+        id,
+        at,
+        role: "assistant" as const,
+        text: result.reply,
+        ...(result.stopped ? { stopped: true } : {}),
+      },
     ],
   };
   if (unresolved(pact.action)) return next;

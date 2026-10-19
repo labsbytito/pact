@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { settleFo } from "../server/fo-task";
-import { NotSubmittedError } from "../server/actions";
+import { settleFo } from "../backend/lib/fo-task";
+import { NotSubmittedError } from "../backend/lib/actions";
 
 const text = (t: string, isError = false) => ({
   content: [{ type: "text", text: t }],

@@ -1,4 +1,4 @@
-import { newCharacterSeed } from "./character";
+import { newCharacterSeed, type CompanionAppearance } from "./character";
 export type Source = {
   title: string;
   url: string;
@@ -23,6 +23,9 @@ export type Message = {
   role: "user" | "assistant";
   text: string;
   at: string;
+  /** User stopped generation; keep partial text. */
+  stopped?: boolean;
+  attachments?: import("./attachments").Attachment[];
 };
 export type Action = {
   id: string;
@@ -32,6 +35,14 @@ export type Action = {
   expiresAt?: string;
   toolName?: string;
   arguments?: Record<string, unknown>;
+  contextHash?: string;
+  consequential?: boolean;
+  /** The user asked for this action. It runs without a second approval card. */
+  explicit?: boolean;
+  /** Assistant message this action belongs to. */
+  messageId?: string;
+  /** Stable for the life of this proposal, including a retry after a lost response. */
+  requestId?: string;
   status:
     | "proposed"
     | "approved"
@@ -46,7 +57,13 @@ export type Action = {
   at?: string;
   runId?: string;
 };
+export type PactCompanion = { name: string; appearance: CompanionAppearance };
 export type Pact = {
+  companion?: PactCompanion;
+  titleSource?: "auto" | "manual";
+  deletedAt?: string;
+  /** Retained locally only for a failed reply retry; cleared when the reply succeeds. */
+  pendingAttachments?: import("./attachments").Attachment[];
   id: string;
   characterSeed?: string;
   title: string;
@@ -58,8 +75,36 @@ export type Pact = {
   action?: Action;
   actions?: Action[];
   archived?: boolean;
+  pinned?: boolean;
+  /** User-created section / folder id. */
+  sectionId?: string | null;
 };
-export type Settings = { onboarded: boolean };
+export type PactSection = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+export type ThemePreference = "system" | "light" | "dark";
+export type AccentPreference = "pact" | "blue" | "teal" | "violet" | "black" | "character";
+export type MotionPreference = "on" | "reduced" | "off";
+export type BackgroundPreference = "dusk" | "ocean" | "sunrise" | "plain";
+export type ResponseStyle = "short" | "detailed";
+export type AskBefore = "suggested" | "always";
+export type TextSize = "default" | "large";
+export type Settings = {
+  onboarded: boolean;
+  theme?: ThemePreference;
+  accent?: AccentPreference;
+  motion?: MotionPreference;
+  background?: BackgroundPreference;
+  /** Selected microphone device id, or "default". */
+  micDeviceId?: string;
+  companion?: CompanionAppearance;
+  responseStyle?: ResponseStyle;
+  askBefore?: AskBefore;
+  sendWithEnter?: boolean;
+  textSize?: TextSize;
+};
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
 export const message = (role: Message["role"], text: string): Message => ({
@@ -72,11 +117,14 @@ export function makePact(
   intention: string,
   source?: Source,
   existing: readonly Pact[] = [],
+  companion?: PactCompanion,
 ): Pact {
   const at = now();
   const id = uid();
   return {
     id,
+    companion: companion ? structuredClone(companion) : undefined,
+    titleSource: "auto",
     characterSeed: newCharacterSeed(
       id,
       existing.map((p) => p.characterSeed ?? p.id),
