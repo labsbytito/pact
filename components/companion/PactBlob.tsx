@@ -56,7 +56,7 @@ export function PactBlob({
     if (!kind || !motion) return;
     setReact(kind);
     const t = window.setTimeout(() => setReact(""), 900);
-    return () => window.clearTimeout(t);
+    return () => { window.clearTimeout(t); setReact(""); };
   }, [state, motion]);
   const [idle, setIdle] = useState<string>("");
   useEffect(() => {

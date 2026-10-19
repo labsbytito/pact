@@ -43,8 +43,8 @@ extension (WXT + React, MV3)  ──HTTPS──▶  backend (Next.js on Vercel) 
 ## Safety, plainly
 
 - Nothing is sent to Fo without an approval click, except plain research you explicitly asked for.
-- Page access uses Chrome's `activeTab` plus a one-time per-site permission you grant. Restricted pages are never read.
-- It's open source, so you can read exactly what the backend does. It only accepts requests from this extension's ID, and Fo credentials are stored encrypted.
+- Pact asks Chrome for access to all sites so it can read whichever page you open it on (Chrome shows an "all websites" warning at install). It only reads a page when you press Read or Summarize, and never reads Chrome's own restricted pages.
+- It's open source, so you can read exactly what the backend does. It only accepts requests from this extension and the Pact website's demo, and Fo credentials are stored encrypted.
 
 ## Develop
 

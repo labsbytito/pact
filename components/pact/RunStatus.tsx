@@ -23,6 +23,7 @@ export function RunStatus({ action, appearance, onRetry }: { action: Action; app
   const text = progress && !/working/i.test(progress) ? progress : copy[action.status] || "Asking Fo…";
   if (action.status === "proposed" || action.status === "returned" || action.status === "superseded") return null;
   const bad = action.status === "failed" || action.status === "unknown";
+  const retryable = action.status === "failed";
   const at = stepIndex(action, progress);
   return (
     <div className="card" role="status">
@@ -37,7 +38,7 @@ export function RunStatus({ action, appearance, onRetry }: { action: Action; app
       )}
       {action.status === "needs_answer" && action.result && <p className="meta">{action.result}</p>}
       {action.status === "needs_answer" && <p className="meta">Reply below and Fo will continue this conversation.</p>}
-      {bad && onRetry && <div className="row-actions"><button className="primary-btn" type="button" onClick={onRetry}>Retry</button></div>}
+      {retryable && onRetry && <div className="row-actions"><button className="primary-btn" type="button" onClick={onRetry}>Retry</button></div>}
     </div>
   );
 }
