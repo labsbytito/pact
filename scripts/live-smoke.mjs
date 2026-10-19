@@ -16,7 +16,7 @@ const health = await json(await fetch(`${origin}/api/health`, { headers: auth })
 check('health is ok', health.ok === true, `budget=${health.budget} model=${health.model}`);
 check('model verified', health.modelVerified === true);
 check('not running in demo mode', health.demo === false);
-check('install rate limit is sized for a room of judges', true, 'verify PACT_RL_INSTALLS_HOUR >= 50 in the deployment');
+console.log('NOTE  install limit per IP per hour is PACT_RL_INSTALLS_HOUR (code default 60); not observable from outside');
 
 const code = `PERIWINKLE-${Math.floor(1000 + Math.random() * 9000)}`;
 const body = { responseStyle: 'short', askBefore: 'suggested', pact: { id: randomUUID(), intention: 'Check my file', messages: [{ role: 'user', text: 'What is the launch codeword in my attached file? Reply with the codeword only.' }], attachments: [{ name: 'note.txt', mime: 'text/plain', kind: 'text', text: `The launch codeword is ${code}.` }] } };

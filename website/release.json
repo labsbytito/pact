@@ -1,8 +1,8 @@
 {
-  "status": "pending",
-  "version": null,
-  "downloadUrl": null,
-  "sha256": null,
-  "backendStatus": "unverified",
-  "notes": "The judge download is being verified. The installation guide is ready below."
+  "status": "ready",
+  "version": "0.1.0",
+  "downloadUrl": "./downloads/pact-judges.zip",
+  "sha256": "928af4896dc994823549f5b15a1e190cc3a46137396324e50a93994e8461bef5",
+  "backendStatus": "verified",
+  "notes": "Verified against the live backend."
 }

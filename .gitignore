@@ -13,3 +13,5 @@ backend/tsconfig.tsbuildinfo
 *.log
 .DS_Store
 .impeccable/
+.vercel
+.env*
