@@ -31,3 +31,11 @@ Limitations:
 Read both user-supplied references in full: DESIGN (1).md (Superhuman), DESIGN (2).md (Wispr Flow). The updated direction combines a person-free cinematic textured horizon, large EB Garamond regular/true-italic display type, cream floating navigation, lavender ink-bordered actions, and a rounded near-black chamber around the Fo story. Inter remains the body/UI font. The explicit user request for a textured gradient overrides the Wispr reference's flat-color guidance. Hero copy now explains the actual product category and relationship: Chrome companion, Claude conversation/page context, Fo tasks.
 
 The mobile hero was adjusted after direct visual inspection found the right product card overlapping the CTA. The card now starts below the hero copy at 360px. Desktop and mobile screenshots refreshed. Original people-containing artwork is removed from the website package. Release status and extension ownership are unchanged.
+
+## Focused editorial and motion refinement
+
+Audited the running desktop and mobile preview after direct feedback. Specific offenders were nested 900ms hero/button entrances, opposed 8s floating card phases, 5s companion bobbing plus blinking, card hover rotation, 70ms per-message staggering, repeated scroll reveals, and repeated rounded ink-bordered containers.
+
+Removed all ambient/scroll motion and nested entrances. Scene changes now use one cancellable 180ms opacity transition; repeated selection does not replay it. Hover feedback uses color/underline without position shifts. Anchor navigation is immediate and lands below the floating header.
+
+Aligned hero examples, replaced the generic companion slogan card with a concrete illustrative task proposal, and made mobile examples flow naturally below the CTA. Replaced boxed principles with an unboxed facts row, framed tabs with an editorial underline, tilted product mockups with upright UI, orbit/chip scatter with aligned Fo/service typography, and boxed installation with a ruled guide. Retained the accepted artwork, typefaces, palette, rounded dark section and pending release.

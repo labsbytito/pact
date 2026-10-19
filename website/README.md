@@ -35,7 +35,7 @@ The ZIP contract agreed with the functionality chat is `START-HERE.html` plus `p
 
 ## Interaction and accessibility
 
-Three manual walkthrough tabs support click, Left/Right arrows and Home/End. Next buttons cycle the same scenes. Role/tab selection state and a polite announcement region follow the selected scene. FAQ uses native details/summary. The Chrome address helper reports clipboard success or exposes the address as fallback. Keyboard focus, skip link and reduced-motion support are included. Motion is limited to paced entrance/reveal, gentle floating/blinking and scene changes. No autoplay task execution or fake sign-in flows.
+Three manual walkthrough tabs support click, Left/Right arrows and Home/End. Next buttons cycle the same scenes. Role/tab selection state and a polite announcement region follow the selected scene. FAQ uses native details/summary. The Chrome address helper reports clipboard success or exposes the address as fallback. Keyboard focus, skip link and reduced-motion support are included. The layout is static at rest: no entrance chains, scroll reveals, floating, bobbing, message stagger or rotating hover effects. An explicit scene change gets one cancellable 180ms opacity transition; controls use the same short color/underline feedback. Reduced motion disables the transition. No autoplay task execution or fake sign-in flows.
 
 ## File ownership
 

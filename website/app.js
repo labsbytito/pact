@@ -1,5 +1,8 @@
 import { approvedRelease } from './release.js';
 
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let sceneTransition;
+motionQuery.addEventListener('change', event => { if (event.matches) sceneTransition?.cancel(); });
 const scenes = {
   think: {
     kicker: 'SPACE TO THINK', title: 'Good conversation.\nA clearer next move.',
@@ -21,8 +24,10 @@ const scenes = {
   }
 };
 const tabs = [...document.querySelectorAll('[data-scene]')];
-let current = 'think';
+let current = null;
 function showScene(key, focus = false) {
+  if (key === current) return;
+  const changing = current !== null;
   const scene = scenes[key];
   current = key;
   tabs.forEach(tab => {
@@ -43,7 +48,6 @@ function showScene(key, focus = false) {
   thread.replaceChildren(...scene.messages.map(([type, text], index) => {
     const el = document.createElement('div');
     el.className = type === 'approval' ? 'approval-card' : `bubble ${type}`;
-    el.style.animationDelay = `${index * 70}ms`;
     if (type === 'approval') {
       const label = document.createElement('span'); label.textContent = 'PROPOSED TASK';
       const copy = document.createElement('p'); copy.textContent = text;
@@ -53,6 +57,10 @@ function showScene(key, focus = false) {
     return el;
   }));
   document.querySelector('#next-scene').replaceChildren(document.createTextNode(scene.nextLabel + ' '), Object.assign(document.createElement('span'), { textContent: '→' }));
+  sceneTransition?.cancel();
+  if (changing && !motionQuery.matches) {
+    sceneTransition = document.querySelector('#demo-panel').animate([{ opacity: .72 }, { opacity: 1 }], { duration: 180, easing: 'cubic-bezier(.2,.6,.3,1)' });
+  }
 }
 tabs.forEach((tab, i) => {
   tab.addEventListener('click', () => showScene(tab.dataset.scene));
@@ -67,15 +75,6 @@ tabs.forEach((tab, i) => {
 });
 document.querySelector('#next-scene').addEventListener('click', () => showScene(scenes[current].next));
 showScene('think');
-
-const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-if ('IntersectionObserver' in window && !reduced.matches) {
-  const observer = new IntersectionObserver(entries => entries.forEach(entry => {
-    if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); }
-  }), { threshold: .08 });
-  document.querySelectorAll('.intro-grid,.section-heading,.control-heading,.control-row,.install-grid,.connection-copy').forEach(el => { el.classList.add('reveal'); observer.observe(el); });
-  reduced.addEventListener('change', () => { if (reduced.matches) document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible')); });
-}
 
 document.querySelector('#copy-address').addEventListener('click', async () => {
   const status = document.querySelector('#copy-status');
