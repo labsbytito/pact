@@ -18,6 +18,7 @@ import { useVault } from "../../hooks/useVault";
 import { clearInstallToken } from "../../lib/api";
 import { connectFo } from "../../lib/backend";
 import { capturePage } from "../../lib/capture";
+import { requestsCurrentPage } from "../../lib/page-intent";
 import type { Source } from "../../lib/model";
 import type { BlobState } from "../../lib/pact-blob";
 import { shouldGreet } from "../../lib/pact-blob";
@@ -67,7 +68,15 @@ export default function App() {
       if (message.type === "pact-invocation") void currentPageLabel().then(setPage);
     };
     chrome.runtime?.onMessage?.addListener(onInvocation);
-    return () => { media.removeEventListener("change", apply); chrome.runtime?.onMessage?.removeListener(onInvocation); };
+    const updatePage = () => { void currentPageLabel().then(setPage); };
+    chrome.tabs?.onActivated?.addListener(updatePage);
+    chrome.tabs?.onUpdated?.addListener(updatePage);
+    return () => {
+      media.removeEventListener("change", apply);
+      chrome.runtime?.onMessage?.removeListener(onInvocation);
+      chrome.tabs?.onActivated?.removeListener(updatePage);
+      chrome.tabs?.onUpdated?.removeListener(updatePage);
+    };
 
   }, []);
   useEffect(() => {
@@ -140,6 +149,11 @@ export default function App() {
     }
   }
   function send() {
+    if (reading || turn.streaming) return;
+    if (requestsCurrentPage(turn.draft)) {
+      requestPage(turn.draft);
+      return;
+    }
     void turn.send(active, source ?? active?.source, turn.draft, (created) => setActiveId(created.id));
   }
   function openConnections() {

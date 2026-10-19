@@ -34,6 +34,7 @@ function setup(
     selection?: SelectionRequest;
     tabUrl?: string | null;
     pendingUrl?: string;
+    initialId?: number;
   } = {},
 ) {
   const original = (globalThis as any).chrome;
@@ -75,7 +76,7 @@ function setup(
           pendingUrl?: string;
         } = {
           ...selected,
-          id: later ? (options.afterId ?? 4) : 4,
+          id: later ? (options.afterId ?? options.initialId ?? 4) : (options.initialId ?? 4),
         };
         if (url == null) delete tab.url;
         else tab.url = url;
@@ -89,7 +90,7 @@ function setup(
       ): Promise<{ result: Source | { captureError: string } }[]> {
         if (request.files) return [];
         executions++;
-        assert.equal(request.target.tabId, 4);
+    assert.equal(request.target.tabId, options.initialId ?? 4);
         return [
           {
             result: {
@@ -122,6 +123,16 @@ test("a refresh captures the current invoked tab and binds source to its window"
   assert.equal(result.tabId, 4);
   assert.equal(result.windowId, 8);
   assert.equal(result.text, "Visible post text");
+});
+test("an explicit read follows the active tab after switching away from the invocation", async (t) => {
+  setup(t, { initialId: 27 });
+  const result = await capturePage();
+  assert.equal(result.tabId, 27);
+});
+test("a reopened panel can explicitly read without stale invocation storage", async (t) => {
+  const { chrome } = setup(t);
+  chrome.storage.session.get = async () => ({} as any);
+  assert.equal((await capturePage()).text, source.text);
 });
 test("a navigation while reading is rejected instead of attaching stale context", async (t) => {
   setup(t, { afterUrl: "https://example.org/another-post" });

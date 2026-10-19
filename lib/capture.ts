@@ -88,20 +88,7 @@ export async function capturePage(
       "Page reading works inside the Pact Chrome extension. Open Pact from the toolbar beside the page you want to share.",
     );
   const panel = await chrome.windows.getCurrent();
-  const stored = await chrome.storage.session.get([
-    "pactInvocation",
-    `pactInvocation:${panel.id}`,
-  ]);
-  const invocation = (stored[`pactInvocation:${panel.id}`] ??
-    stored.pactInvocation) as { tabId: number; windowId: number } | undefined;
-  if (invocation && invocation.windowId !== panel.id)
-    throw new Error(
-      "Click Pact’s toolbar icon in this window to share the page.",
-    );
-  if (!invocation)
-    throw new Error("Click Pact’s toolbar icon on this page to share it.");
-  const target = request ?? invocation;
-  if (target.windowId !== panel.id)
+  if (request && request.windowId !== panel.id)
     throw new Error(
       "That selection belongs to another window. Open Pact beside the selected page.",
     );
@@ -113,12 +100,18 @@ export async function capturePage(
     throw new Error("That selection expired. Select the text again.");
   const [tab] = await chrome.tabs.query({
     active: true,
-    windowId: target.windowId,
+    windowId: panel.id,
   });
-  if (tab?.id !== target.tabId)
+  if (tab?.id === undefined || tab.windowId !== panel.id)
+    throw new Error("Open Pact beside the page in this window to share it.");
+  if (request && tab.id !== request.tabId)
     throw new Error(
       "The active tab changed. Click Pact’s toolbar icon on the page you want to share.",
     );
+  // This function is called by an explicit Read click or page-reading request.
+  // Resolve that gesture to the current tab, not the tab that opened the panel.
+  // Selection handoffs retain their original tab and URL checks.
+  const target = { tabId: tab.id, windowId: tab.windowId };
   // pendingUrl only fills in while the committed url is still empty (navigation).
   // A missing URL means this extension cannot see the page yet. That is an
   // unread site, separate from chrome:// and the Chrome Web Store.
