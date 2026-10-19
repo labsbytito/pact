@@ -1,4 +1,4 @@
-import { userAskedToAct } from "./intent";
+import { qualifiesForBypass } from "./intent";
 import { PACT_STREAM_DELIM } from "./stream-parse";
 
 const RESEARCH =
@@ -7,12 +7,42 @@ const RESEARCH =
 const ACCESS =
   "Find the official accessibility planning page for this place. Reply with the URL and one sentence on what it covers. Do not contact anyone, book anything, or spend money.";
 
-export function mockProposal(latest: string) {
-  const explicit = userAskedToAct(latest);
+export type MockOptions = {
+  responseStyle?: "short" | "detailed";
+  askBefore?: "suggested" | "always";
+};
+
+function subjectFor(latest: string) {
+  if (/accessib/i.test(latest)) return "the official accessibility page";
+  if (/hour|open|visit/i.test(latest)) return "the opening hours";
+  return "the official visiting details";
+}
+
+function mockReply(latest: string, waiting: boolean, style?: "short" | "detailed") {
+  const subject = subjectFor(latest);
+  if (!waiting) {
+    if (style === "short") return "I’ll ask Fo for that now.";
+    if (style === "detailed")
+      return "I’ll ask Fo for that now. I’ll pass along exactly what you asked, then show Fo’s reply here. I won’t book, contact anyone, or pay.";
+    return "I’ll ask Fo for that now. I’ll show you the reply here when it comes back.";
+  }
+  if (style === "short") return `I can ask Fo for ${subject}. Approve below when you’re ready.`;
+  if (style === "detailed")
+    return `I can ask Fo for ${subject}.\n\n- Official hours\n- The page to plan a visit\n- Any caveat worth knowing\n\nNothing is sent until you approve. Approve below when you’re ready.`;
+  return `I can ask Fo for ${subject}. The request stays here until you approve it. Approve below when you’re ready.`;
+}
+
+export function mockProposal(latest: string, options?: MockOptions) {
+  const message = latest.trim();
+  const explicit = qualifiesForBypass({
+    latest,
+    toolName: "ask_fo",
+    message,
+    askBefore: options?.askBefore,
+  });
   if (explicit) {
-    const message = latest.trim();
     return {
-      reply: "I’ll ask Fo to do that now.",
+      reply: mockReply(latest, false, options?.responseStyle),
       title: "Ask Fo",
       action: {
         title: "Ask Fo",
@@ -23,24 +53,21 @@ export function mockProposal(latest: string) {
     };
   }
   const access = /accessib/i.test(latest);
-  const message = access ? ACCESS : RESEARCH;
-  const reply = access
-    ? "I’ll ask Fo for the official accessibility page. That waits until you approve."
-    : "I’ll ask Fo for the official visiting details. Nothing is sent until you approve.";
+  const instruction = access ? ACCESS : RESEARCH;
   return {
-    reply,
+    reply: mockReply(latest, true, options?.responseStyle),
     title: access ? "Accessibility page" : "Visit research",
     action: {
       title: access ? "Ask Fo for the accessibility page" : "Ask Fo for visiting information",
-      instruction: message,
+      instruction,
       toolName: "ask_fo",
-      arguments: { message },
+      arguments: { message: instruction },
     },
   };
 }
 
-export function mockRaw(latest: string) {
-  const proposal = mockProposal(latest);
+export function mockRaw(latest: string, options?: MockOptions) {
+  const proposal = mockProposal(latest, options);
   return `${proposal.reply}\n${PACT_STREAM_DELIM}\n${JSON.stringify({
     title: proposal.title,
     action: proposal.action,

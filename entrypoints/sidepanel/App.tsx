@@ -66,7 +66,7 @@ export default function App() {
       watchRef.current(active, action.runId);
       return;
     }
-    if (action.planId && (action.status === "running" || action.status === "approved"))
+    if (action.requestId && action.planId && !action.runId && (action.status === "running" || action.status === "approved"))
       void recoverRef.current(active);
   }, [active?.id, active?.action?.runId, active?.action?.status, active?.action?.planId]);
   useEffect(() => {
@@ -151,18 +151,22 @@ export default function App() {
             <SettingsSheet settings={settings} onChange={updateSettings} fo={health?.fo} navWide={navWide} page={settingsPage} onPage={setSettingsPage} onRefresh={() => void refresh()} onDeleted={() => void deleted()} demo={!!health?.demo} />
           ) : view === "list" ? (
             <>
-              {down && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
+              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
               <PactList pacts={pacts.filter((item) => !item.archived)} appearance={settings.companion} onOpen={(id) => { setActiveId(id); setView("home"); }} />
             </>
           ) : link.kind === "loading" && !active ? (
             <p className="site-line">Opening Pact…</p>
-          ) : down && !active ? (
-            <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
+          ) : down && !active && link.kind !== "offline" ? (
+            <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : "limited"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : !active ? (
-            <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
+            <>
+              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your Pacts are still saved on this computer." onRetry={() => void refresh()} />}
+              <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(title)} onOpenConnections={openConnections} onAsk={turn.setDraft} />
+            </>
           ) : (
             <>
-              {down && <ReachBanner title="Can’t reach Pact" detail="Your conversation is still here." onRetry={() => void refresh()} />}
+              {link.kind === "offline" && <ReachBanner title="Can’t reach Pact" detail="Your conversation is still here." onRetry={() => void refresh()} />}
+              {down && link.kind !== "offline" && <ReachBanner title={link.kind === "limited" ? "Pact needs a short break" : "Pact isn’t ready yet"} detail="Your conversation is still here." onRetry={() => void refresh()} />}
               <Transcript active={active} busy={turn.busy} streaming={turn.streaming} signedOut={signedOut} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact)} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
               {turn.replyError && <ReachBanner title={turn.replyError} onRetry={retryReply} />}
             </>

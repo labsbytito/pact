@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AbortInterpretError, interpretLive, type TurnPrefs } from "../lib/api";
+import { AbortInterpretError, ApiError, interpretLive, type TurnPrefs } from "../lib/api";
 import { approveRequest, cancelPlan, loadRunByPlan, pollRun } from "../lib/backend";
 import { makePact, message, now, uid, type Action, type Pact, type Source } from "../lib/model";
 import { autoApprove } from "../lib/settings";
@@ -13,8 +13,9 @@ export function useTurn(save: (pact: Pact) => void) {
   const [note, setNote] = useState("");
   const [replyError, setReplyError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
-  const pollRef = useRef<number | null>(null);
+  const pollRef = useRef(new Map<string, number>());
   const approving = useRef(false);
+  const sought = useRef(new Set<string>());
   const latest = useRef(new Map<string, Pact>());
   const prefs = useRef<TurnPrefsLive>({});
   function remember(next: Pact) {
@@ -23,50 +24,67 @@ export function useTurn(save: (pact: Pact) => void) {
     return next;
   }
 
-  function stopPoll() {
-    if (pollRef.current) window.clearTimeout(pollRef.current);
+  function stopPoll(runId?: string) {
+    if (!runId) {
+      for (const timer of pollRef.current.values()) window.clearTimeout(timer);
+      pollRef.current.clear();
+      return;
+    }
+    const timer = pollRef.current.get(runId);
+    if (timer) window.clearTimeout(timer);
+    pollRef.current.delete(runId);
+  }
+
+  function ownedAction(base: Pact, runId: string) {
+    if (base.action?.runId === runId) return base.action;
+    const saved = (base.actions ?? []).find((item) => item.runId === runId);
+    if (saved) return saved;
+    if (base.action && !base.action.runId && (base.action.status === "running" || base.action.status === "approved"))
+      return base.action;
+    return undefined;
   }
 
   function watch(pact: Pact, runId: string) {
-    stopPoll();
+    stopPoll(runId);
     const tick = async () => {
       try {
         const run = await pollRun(runId);
         const base = latest.current.get(pact.id) ?? pact;
-        const previous = base.action;
-        const owns =
-          previous?.runId === runId ||
-          ((previous?.status === "running" || previous?.status === "approved") && !previous.runId);
-        if (!owns) return;
+        const previous = ownedAction(base, runId);
+        if (!previous) return;
         const action: Action = {
-          ...(previous ?? (pact.action as Action)),
+          ...previous,
           status: run.status === "running" ? "running" : run.status,
           result: run.result || run.error,
           progress: run.progress,
           runId,
         };
         const history = base.actions ?? [];
+        const current = base.action?.id === action.id || base.action?.runId === runId;
         remember({
           ...base,
           updatedAt: now(),
-          action,
+          action: current ? action : base.action,
           actions:
             run.status === "running"
-              ? history
+              ? history.map((item) => (item.id === action.id ? action : item))
               : [...history.filter((item) => item.id !== action.id), action],
         });
-        if (run.status === "running") pollRef.current = window.setTimeout(() => void tick(), 3000);
+        if (run.status === "running") pollRef.current.set(runId, window.setTimeout(() => void tick(), 3000));
       } catch (error) {
         setNote(error instanceof Error ? error.message : "Pact lost the run status.");
       }
     };
-    pollRef.current = window.setTimeout(() => void tick(), 400);
+    pollRef.current.set(runId, window.setTimeout(() => void tick(), 400));
   }
 
   async function recover(pact: Pact) {
+    if (approving.current) return;
     const action = (latest.current.get(pact.id) ?? pact).action;
-    if (!action?.planId || action.runId) return;
+    if (!action?.planId || action.runId || !action.requestId) return;
     if (action.status !== "approved" && action.status !== "running") return;
+    if (sought.current.has(action.planId)) return;
+    sought.current.add(action.planId);
     try {
       const run = await loadRunByPlan(action.planId);
       const base = latest.current.get(pact.id) ?? pact;
@@ -85,8 +103,17 @@ export function useTurn(save: (pact: Pact) => void) {
         },
       });
       if (run.status === "running") watch(next, run.runId);
-    } catch {
-      /* No accepted run yet. Leave the request where it is. */
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) return;
+      const base = latest.current.get(pact.id) ?? pact;
+      const current = base.action;
+      if (!current || current.planId !== action.planId || current.runId) return;
+      if (current.status !== "approved" && current.status !== "running") return;
+      remember({
+        ...base,
+        updatedAt: now(),
+        action: { ...current, status: "proposed", progress: undefined },
+      });
     }
   }
 
@@ -152,11 +179,15 @@ export function useTurn(save: (pact: Pact) => void) {
             status: "proposed",
           }
         : undefined;
+      const prior = live.action;
+      const keepRunning = prior && (prior.status === "running" || prior.status === "approved") && prior.runId ? prior : undefined;
+      const history = live.actions ?? [];
       pact = remember({
         ...live,
         title: created && result.title ? result.title : live.title,
         messages: live.messages.map((item) => item.id === assistant.id ? { ...assistant } : item),
-        action: action ?? (live.action?.status === "proposed" ? { ...live.action, status: "superseded" } : live.action),
+        action: action ?? (prior?.status === "proposed" ? { ...prior, status: "superseded" } : prior),
+        actions: keepRunning && action ? [...history.filter((item) => item.id !== keepRunning.id), keepRunning] : history,
         updatedAt: now(),
       });
       if (autoApprove(pact.action?.explicit, prefs.current.askBefore, Boolean(prefs.current.signedOut)))
@@ -191,9 +222,10 @@ export function useTurn(save: (pact: Pact) => void) {
     if (!action?.planId) return current;
     const retry = action.status === "proposed" || action.status === "failed" || (action.status === "approved" && Boolean(action.requestId));
     if (!retry) return current;
+    sought.current.delete(action.planId);
     approving.current = true;
     setBusy(true);
-    const requestId = action.requestId || uid();
+    const requestId = action.status === "failed" ? uid() : action.requestId || uid();
     remember({ ...current, action: { ...action, requestId, status: "approved" }, updatedAt: now() });
     try {
       const run = await approveRequest({

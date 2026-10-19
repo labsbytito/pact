@@ -71,6 +71,7 @@
 .bubble {
   position: relative;
   max-width: 100%;
+  color: var(--text-1);
   padding: 10px 14px;
   border-radius: var(--r-bubble);
   font-size: 14px;
@@ -137,6 +138,8 @@ html[data-motion="reduced"] .msg { animation: none; }
   font-size: 11px;
 }
 .tick { display: inline-block; animation: tick 160ms ease; }
+html[data-motion="off"] .tick,
+html[data-motion="off"] .menu { animation: none; }
 @keyframes tick { from { transform: scale(0.6); } }
 .ask-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; margin-top: 8px; }
 .ask-chip {
@@ -160,7 +163,7 @@ html[data-motion="off"] .tool-tile:hover .tile-face { transform: none; }
 .bubble .md-heading { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
 .md-p { margin: 0 0 8px; }
 .bubble .md-p:last-child, .card .md-p:last-child, .bubble :last-child, .card :last-child { margin-bottom: 0; }
-@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes rise { from { opacity: 0.6; transform: translateY(4px); } }
 .status-line {
   display: flex;
   align-items: center;
@@ -346,7 +349,7 @@ html[data-motion="reduced"] .live-dot { animation: none; }
   box-shadow: none;
 }
 .composer[data-multiline] {
-  border-radius: 16px;
+  border-radius: 12px;
   grid-template-areas: "text text text text" "plus . mic send";
 }
 .composer[data-multiline] textarea { grid-area: text; }

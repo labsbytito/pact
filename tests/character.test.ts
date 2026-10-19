@@ -65,10 +65,13 @@ test("different seeds usually diverge in shape or color", () => {
 test("shapes and palette meet the floor", () => {
   assert.ok(SHAPES.length >= 8);
   assert.ok(PALETTE.length >= 8);
+  assert.equal(new Set(SHAPES).size, SHAPES.length);
   for (const path of SHAPES) {
     assert.match(path, /^M/);
     assert.match(path, /Z$/i);
   }
+  const eyes = brandCharacter(DEFAULT_COMPANION).eye;
+  assert.ok(eyes.width >= 8 && eyes.height >= 20);
 });
 
 test("eye geometry stays inside the viewBox", () => {

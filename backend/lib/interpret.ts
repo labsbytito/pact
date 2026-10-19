@@ -21,7 +21,7 @@ import { guardMessage, qualifiesForBypass } from "./intent";
 import { jsonSystemPrompt, streamSystemPrompt } from "./interpret-prompt";
 import { mockRaw } from "./mock";
 import { sourceSchema } from "./source";
-import { splitStreamReply, streamReplyDelta } from "./stream-parse";
+import { PACT_STREAM_DELIM, splitStreamReply, streamReplyDelta } from "./stream-parse";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(120),
@@ -190,10 +190,17 @@ function modelFromStream(raw: string) {
   return { reply, ...base };
 }
 
-async function* chunks(system: string, content: string, images: ClaudeImage[], signal: AbortSignal, latest: string) {
+async function* chunks(
+  system: string,
+  content: string,
+  images: ClaudeImage[],
+  signal: AbortSignal,
+  latest: string,
+  mock?: { responseStyle?: "short" | "detailed"; askBefore?: "suggested" | "always" },
+) {
   if (aiMocked()) {
-    const raw = mockRaw(latest);
-    const reply = raw.split("\n")[0] ?? raw;
+    const raw = mockRaw(latest, mock);
+    const reply = raw.split(PACT_STREAM_DELIM)[0]?.trimEnd() ?? raw;
     const pace = Number(process.env.PACT_MOCK_PACE_MS || 0);
     for (const word of reply.split(" ")) {
       if (pace > 0) await new Promise((resolve) => setTimeout(resolve, pace));
@@ -234,6 +241,7 @@ export async function runInterpretation(options: {
     packed.images,
     abort.signal,
     latest,
+    { responseStyle: options.responseStyle, askBefore: options.askBefore },
   )) {
     if (chunk.type === "delta") {
       buffer += chunk.text;

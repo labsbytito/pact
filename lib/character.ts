@@ -66,42 +66,42 @@ export const PALETTE = [
 
 /**
  * One solid silhouette each, viewBox 0 0 100 100.
- * 0 circle, 1 rounded square, 2 rounded square (tilted −12°),
- * 3 horizontal pill, 4 vertical capsule, 5 soft triangle,
- * 6 cloud, 7 squircle (tilted +10°), 8 bean, 9 egg,
- * 10 rounded diamond, 11 soft pentagon.
+ * 0 circle, 1 dome, 2 chunky square (tilted −12°),
+ * 3 wide pill, 4 tall capsule, 5 soft triangle,
+ * 6 three-bump cloud, 7 shield (tilted −12°), 8 bean,
+ * 9 flat-base blob, 10 rounded diamond, 11 chunky square.
  */
 export const SHAPES: readonly string[] = [
   "M50 12a38 38 0 1 0 0 76a38 38 0 1 0 0-76Z",
-  "M42 14h16a28 28 0 0 1 28 28v16a28 28 0 0 1-28 28H42a28 28 0 0 1-28-28V42a28 28 0 0 1 28-28Z",
-  "M42 14h16a28 28 0 0 1 28 28v16a28 28 0 0 1-28 28H42a28 28 0 0 1-28-28V42a28 28 0 0 1 28-28Z",
-  "M32 28h36a22 22 0 0 1 0 44H32a22 22 0 0 1 0-44Z",
-  "M28 32v36a22 22 0 0 0 44 0V32a22 22 0 0 0-44 0Z",
-  "M50 16C64 18 74 32 76 46C78 64 66 82 50 84C34 82 22 64 24 46C26 32 36 18 50 16Z",
-  "M28 62C16 60 14 48 24 44C18 34 32 24 44 32C50 18 68 20 72 34C84 26 96 38 90 50C100 60 88 72 74 68C62 78 38 76 28 62Z",
-  "M50 14C68 14 86 32 86 50C86 68 68 86 50 86C32 86 14 68 14 50C14 32 32 14 50 14Z",
-  "M36 22C54 14 76 24 78 42C80 62 64 80 46 82C30 84 16 70 20 54C22 44 34 42 42 50C48 56 44 66 34 60C24 54 22 40 28 32C30 26 32 24 36 22Z",
-  "M50 12C68 12 80 32 80 52C80 74 66 88 50 88C34 88 20 74 20 52C20 32 32 12 50 12Z",
-  "M50 14C58 14 66 22 74 34C84 48 84 52 74 66C66 78 58 86 50 86C42 86 34 78 26 66C16 52 16 48 26 34C34 22 42 14 50 14Z",
-  "M50 14C62 14 74 22 80 34C88 48 86 62 76 74C66 84 54 88 50 88C46 88 34 84 24 74C14 62 12 48 20 34C26 22 38 14 50 14Z",
+  "M18 78H82V50C82 28 68 16 50 16C32 16 18 28 18 50Z",
+  "M32 16H70Q86 16 84 32L78 68Q76 86 60 86H36Q20 86 22 68L20 32Q18 16 32 16Z",
+  "M16 34H84A16 16 0 0 1 84 66H16A16 16 0 0 1 16 34Z",
+  "M34 16H66A16 16 0 0 1 66 84H34A16 16 0 0 1 34 16Z",
+  "M63.7 26L81.3 58.2Q90 74 72.2 76.7L29.8 83Q10 86 20.6 69L47.6 25.6Q56 12 63.7 26Z",
+  "M22 64C10 64 10 50 22 48C18 36 30 28 40 36C46 22 62 22 68 36C80 30 94 42 88 54C98 66 86 76 72 70C60 80 36 78 22 64Z",
+  "M22 26H78Q82 26 80 34Q74 58 58 78Q50 88 42 78Q26 58 20 34Q18 26 22 26Z",
+  "M38 20C56 14 76 24 80 42C84 62 68 80 48 82C32 84 18 72 22 56C26 42 40 44 46 52C52 60 46 70 34 64C22 58 20 42 28 32C32 26 34 22 38 20Z",
+  "M20 74H80C84 74 86 66 82 56C76 42 66 30 52 26C36 22 22 34 18 50C14 64 14 74 20 74Z",
+  "M50 12C62 26 80 40 84 50C80 62 62 80 50 88C38 80 20 62 16 50C20 40 38 26 50 12Z",
+  "M28 18H72Q84 18 84 30V70Q84 84 72 84H28Q16 84 16 70V30Q16 18 28 18Z",
 ];
 
 type Face = { tilt: number; cx: number; cy: number; gap: number; rotate: number; lookX: number; lookY: number };
 
 /** Eyes sit just above centre. Lean follows the shape. */
 export const FACES: readonly Face[] = [
-  { tilt: 0, cx: 50, cy: 44, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 44, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: -12, cx: 46, cy: 44, gap: 14, rotate: -8, lookX: -1, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 42, gap: 12, rotate: 0, lookX: 0, lookY: -1 },
-  { tilt: -4, cx: 48, cy: 50, gap: 13, rotate: -4, lookX: -1, lookY: 1 },
-  { tilt: -3, cx: 52, cy: 46, gap: 14, rotate: -3, lookX: 1, lookY: 0 },
-  { tilt: 10, cx: 54, cy: 44, gap: 14, rotate: 8, lookX: 1, lookY: 0 },
-  { tilt: -8, cx: 46, cy: 48, gap: 12, rotate: -6, lookX: -1, lookY: 0 },
-  { tilt: 0, cx: 50, cy: 46, gap: 14, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 46, gap: 16, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 48, gap: 16, rotate: 0, lookX: 0, lookY: 1 },
+  { tilt: -12, cx: 44, cy: 46, gap: 14, rotate: -8, lookX: -1, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 50, gap: 18, rotate: 0, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 40, gap: 12, rotate: 0, lookX: 0, lookY: -1 },
+  { tilt: -6, cx: 46, cy: 56, gap: 13, rotate: -4, lookX: -1, lookY: 1 },
+  { tilt: 2, cx: 54, cy: 50, gap: 14, rotate: 2, lookX: 1, lookY: 0 },
+  { tilt: -12, cx: 46, cy: 48, gap: 13, rotate: -8, lookX: -1, lookY: 0 },
+  { tilt: -8, cx: 44, cy: 48, gap: 12, rotate: -6, lookX: -1, lookY: 0 },
+  { tilt: 4, cx: 52, cy: 50, gap: 14, rotate: 3, lookX: 1, lookY: 1 },
   { tilt: 0, cx: 50, cy: 48, gap: 12, rotate: 0, lookX: 0, lookY: 0 },
-  { tilt: 2, cx: 50, cy: 46, gap: 14, rotate: 2, lookX: 0, lookY: 0 },
+  { tilt: 0, cx: 50, cy: 46, gap: 15, rotate: 0, lookX: 0, lookY: 0 },
 ];
 
 /** Previous shape ids: circle, triangle, square, pill, cloud, heart, star, drop, bean, ghost, hexagon, flower. */
@@ -111,17 +111,17 @@ const RETIRED_COLORS = new Set(["#8B5CF6", "#A78BFA", "#A855F7", "#6366F1", "#81
 
 export const SHAPE_OPTIONS = [
   { shape: 0, name: "Circle" },
-  { shape: 1, name: "Square" },
+  { shape: 1, name: "Dome" },
   { shape: 2, name: "Tilted square" },
   { shape: 3, name: "Pill" },
   { shape: 4, name: "Capsule" },
   { shape: 5, name: "Triangle" },
   { shape: 6, name: "Cloud" },
-  { shape: 7, name: "Squircle" },
+  { shape: 7, name: "Shield" },
   { shape: 8, name: "Bean" },
-  { shape: 9, name: "Egg" },
+  { shape: 9, name: "Blob" },
   { shape: 10, name: "Diamond" },
-  { shape: 11, name: "Pentagon" },
+  { shape: 11, name: "Square" },
 ] as const;
 
 export const COLOR_SWATCHES = [
@@ -217,8 +217,8 @@ export function brandCharacter(
     tilt: face.tilt,
     eye: {
       kind: "pill",
-      width: 7,
-      height: 18,
+      width: 8.4,
+      height: 21,
       gap: face.gap,
       cx: face.cx,
       cy: face.cy,

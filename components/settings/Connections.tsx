@@ -31,8 +31,15 @@ export function Connections({
 }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
-  const [tools, setTools] = useState<{ name: string }[]>([]);
+  const [tools, setTools] = useState<{ name: string; description?: string; url?: string }[]>([]);
+  const [guidance, setGuidance] = useState("");
   const signedIn = fo === "signed in";
+
+  async function refreshStatus() {
+    const body = await loadFoStatus();
+    setTools(body.tools ?? []);
+    onRefresh?.();
+  }
 
   useEffect(() => {
     let stop = false;
@@ -70,13 +77,39 @@ export function Connections({
     return tools.some((tool) => pattern.test(tool.name) && !INTERNAL.has(tool.name));
   }
 
-  async function connectService(id: string, name: string) {
+  function exposedUrl(pattern: RegExp) {
+    for (const tool of tools) {
+      if (INTERNAL.has(tool.name) || !pattern.test(`${tool.name} ${tool.description ?? ""}`)) continue;
+      if (tool.url && /^https:\/\//.test(tool.url)) return tool.url;
+      const found = tool.description?.match(/https:\/\/[^\s)]+/);
+      if (found) return found[0];
+    }
+    return undefined;
+  }
+
+  async function openFo() {
+    const result = await connectFo();
+    if (result.url) {
+      await chrome.tabs.create({ url: result.url });
+      onRefresh?.();
+      return true;
+    }
+    return false;
+  }
+
+  async function connectService(id: string, name: string, pattern: RegExp) {
     await run(id, async () => {
-      if (!signedIn) {
-        await connectAccount();
+      const direct = exposedUrl(pattern);
+      if (direct) {
+        await chrome.tabs.create({ url: direct });
+        setGuidance("");
         return;
       }
-      setNote(`${name} stays not connected. Nothing was sent.`);
+      if (await openFo()) {
+        setGuidance("");
+        return;
+      }
+      setGuidance(name);
     });
   }
 
@@ -116,7 +149,7 @@ export function Connections({
           status={serviceConnected(/gmail|google.?mail/i) ? "Connected" : "Not connected"}
           action="Connect"
           disabled={busy === "gmail"}
-          onAction={() => void connectService("gmail", "Gmail")}
+          onAction={() => void connectService("gmail", "Gmail", /gmail|google.?mail/i)}
         />
         <ServiceRow
           icon={glyph(Calendar)}
@@ -124,7 +157,7 @@ export function Connections({
           status={serviceConnected(/calendar/i) ? "Connected" : "Not connected"}
           action="Connect"
           disabled={busy === "calendar"}
-          onAction={() => void connectService("calendar", "Google Calendar")}
+          onAction={() => void connectService("calendar", "Google Calendar", /calendar/i)}
         />
         {extras.map((tool) => (
           <ServiceRow
@@ -134,10 +167,21 @@ export function Connections({
             status="Not connected"
             action="Connect"
             disabled={busy === tool.name}
-            onAction={() => void connectService(tool.name, labelFor(tool.name))}
+            onAction={() => void connectService(tool.name, labelFor(tool.name), new RegExp(tool.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"))}
           />
         ))}
       </div>
+      {guidance && (
+        <div className="conn-guide" role="status">
+          <p>Connect {guidance} inside Fo first, then come back. Pact will see it here.</p>
+          <div className="row-actions">
+            <button className="text-btn" type="button" onClick={() => void run("fo-open", async () => {
+              if (!(await openFo())) setNote("Fo didn't share a page to open. Connect it inside Fo, then refresh.");
+            })}>Open Fo</button>
+            <button className="text-btn" type="button" onClick={() => void run("refresh", async () => { await refreshStatus(); })}>Refresh status</button>
+          </div>
+        </div>
+      )}
       {note && <p className="conn-note">{note}</p>}
       <div className="group-label">Data</div>
       <div className="group">

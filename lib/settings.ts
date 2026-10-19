@@ -18,7 +18,7 @@ export const emptySettings: Settings = {
 export function normalizeSettings(prefs: Partial<Settings> | null | undefined): Settings {
   const stored = prefs ?? {};
   const accent =
-    !stored.accent || stored.accent === "pact" || stored.accent === "character"
+    !stored.accent || stored.accent === "pact" || stored.accent === "character" || stored.accent === "violet"
       ? "teal"
       : stored.accent;
   return {

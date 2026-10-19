@@ -35,14 +35,29 @@
 }
 :root[data-theme="light"] .settings nav button[aria-current="page"] { background: rgba(0, 0, 0, 0.06); }
 @media (max-width: 479px) {
-  .settings { flex-direction: column; }
+  .settings { flex-direction: column; max-width: 100%; }
   .settings nav {
     width: auto;
+    max-width: 100%;
     flex-direction: row;
+    flex-wrap: wrap;
     margin: 8px 12px 0;
     overflow: auto;
+    scrollbar-width: none;
+    gap: 2px;
+    padding: 4px;
   }
-  .settings nav button { flex: none; }
+  .settings nav::-webkit-scrollbar { display: none; height: 0; }
+  .settings nav button {
+    flex: 1 1 46%;
+    min-width: 0;
+    height: 30px;
+    padding: 0 6px;
+    gap: 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .settings nav button svg { width: 13px; height: 13px; }
 }
 .settings-body { flex: 1; min-width: 0; padding: 8px 12px 24px; position: relative; }
 .settings-close { position: absolute; top: 8px; right: 8px; }
@@ -83,6 +98,16 @@
 .set-row.conn .text-btn { min-width: max-content; }
 .conn-meta { color: var(--text-2); font-size: 12px; }
 .conn-note { margin: 8px 4px 0; color: var(--text-2); font-size: 12px; }
+.conn-guide {
+  margin: 8px 4px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.conn-guide p { margin: 0 0 8px; color: var(--text-1); }
 .set-row .text-btn:disabled { opacity: 0.45; }
 .set-row select, .pill-value {
   height: 28px;

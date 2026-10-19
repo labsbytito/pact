@@ -7,7 +7,7 @@ test("unset, pact, and character accents become teal", () => {
   assert.equal(normalizeSettings({ onboarded: true, accent: "pact" }).accent, "teal");
   assert.equal(normalizeSettings({ onboarded: true, accent: "character" }).accent, "teal");
   assert.equal(normalizeSettings({ onboarded: true, accent: "blue" }).accent, "blue");
-  assert.equal(normalizeSettings({ onboarded: true, accent: "violet" }).accent, "violet");
+  assert.equal(normalizeSettings({ onboarded: true, accent: "violet" }).accent, "teal");
   assert.equal(normalizeSettings({ onboarded: true, accent: "black" }).accent, "black");
 });
 

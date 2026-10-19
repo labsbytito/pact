@@ -32,12 +32,25 @@ export function PactBlob({
   const [lid, setLid] = useState(0);
   const [look, setLook] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLSpanElement>(null);
-  const setting = typeof document !== "undefined" ? document.documentElement.dataset.motion : "on";
+  const [setting, setSetting] = useState(() =>
+    typeof document === "undefined" ? "on" : (document.documentElement.dataset.motion ?? "on"),
+  );
+  useEffect(() => {
+    const root = document.documentElement;
+    const read = () => setSetting(root.dataset.motion ?? "on");
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-motion"] });
+    return () => observer.disconnect();
+  }, []);
   const motion = live && setting !== "off" && !prefersReducedMotion();
   const follow = motion && size >= 72 && setting === "on" && face !== "sleepy";
   const mode = !motion ? "off" : setting === "reduced" ? "reduced" : "on";
   useEffect(() => {
-    if (!motion) return;
+    if (!motion) {
+      setLid(0);
+      return;
+    }
     let timer = 0;
     const blink = () => {
       setLid(1);

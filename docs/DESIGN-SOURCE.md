@@ -17,7 +17,7 @@ Taken from `grokbot-chat-light.png` and the Grok teardown:
 - Light assistant bubbles `#ffffff` with a `#e5e5e5` hairline. Light user bubbles `#e6e6e6`. Dark assistant bubbles are a 6% white fill. Dark user bubbles `#2a2a2a`.
 - Dark selected `#242424`. Dark hairline `#292929`.
 - Areas separate by tone. No divider lines.
-- Composer stays a pill until it wraps past two lines, then the radius is 16px. Send is a 28px circle: white with a `#111` arrow in dark, `#111` with a white arrow in light. It does not use the accent.
+- Composer stays a pill until it wraps past two lines, then the radius is 12px. Send is a 28px circle: white with a `#111` arrow in dark, `#111` with a white arrow in light. It does not use the accent.
 
 Dark tokens stay the ones in `styles/tokens.css`.
 

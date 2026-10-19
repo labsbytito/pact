@@ -18,7 +18,6 @@ export type SettingsPage = (typeof pages)[number]["id"];
 const accents: { id: AccentPreference; label: string }[] = [
   { id: "teal", label: "Teal" },
   { id: "blue", label: "Blue" },
-  { id: "violet", label: "Violet" },
   { id: "black", label: "Black" },
 ];
 
@@ -82,7 +81,7 @@ export function SettingsSheet({
 }
 
 function General({ settings, onChange }: { settings: Settings; onChange: (patch: Partial<Settings>) => void }) {
-  const accent = settings.accent === "pact" || settings.accent === "character" || !settings.accent ? "teal" : settings.accent;
+  const accent = settings.accent === "pact" || settings.accent === "character" || settings.accent === "violet" || !settings.accent ? "teal" : settings.accent;
   return (
     <>
       <div className="group-label">Appearance</div>
@@ -206,7 +205,9 @@ function Microphone({ settings, onChange }: { settings: Settings; onChange: (pat
       <div className="set-row">
         <span>Permission</span>
         <span className="conn-meta">{mic}</span>
-        <button className="text-btn" type="button" onClick={() => void (perm === "denied" ? openMicSiteSettings() : openMicPermissionPage()).catch(() => setPerm("unknown"))}>Allow</button>
+        {perm !== "granted" && (
+          <button className="text-btn" type="button" onClick={() => void (perm === "denied" ? openMicSiteSettings() : openMicPermissionPage()).catch(() => setPerm("unknown"))}>Allow</button>
+        )}
       </div>
       <p className="conn-note">The side panel can't ask for the microphone. Allow opens a Pact page where Chrome can.</p>
     </div>

@@ -34,14 +34,17 @@ export function Transcript({
   onEdit: (text: string) => void;
 }) {
   const action = active.action;
+  const failed = action?.status === "failed";
   const runs = (active.actions ?? []).filter((item) => item.status === "returned" && item.result);
   const tagged = runs.filter((item) => item.messageId);
   const loose = runs.filter((item) => !item.messageId);
+  const activities = (active.actions ?? []).filter((item) => settled.has(item.status) && !(failed && item.id === action?.id));
+  const byTime = (left: { at?: string }, right: { at?: string }) => (left.at ?? "").localeCompare(right.at ?? "");
   let shown = 0;
+  let looseActivity = 0;
   const last = active.messages.at(-1);
   const waiting = Boolean(streaming && last?.role === "assistant" && !last.text);
   const showCard = action?.status === "proposed" && (!action.explicit || signedOut);
-  const failed = action?.status === "failed";
   const prior = [...active.messages].reverse().find((entry) => entry.role === "user")?.text;
   return (
     <Thread>
@@ -52,6 +55,15 @@ export function Transcript({
         const looseHit = !taggedHit && item.role === "assistant" && (!next || next.role === "user") ? loose[shown] : undefined;
         if (looseHit) shown += 1;
         const result = taggedHit ?? looseHit;
+        const ownActivity = item.role === "assistant"
+          ? activities.filter((entry) => entry.messageId === item.id).sort(byTime)
+          : [];
+        const untagged = item.role === "assistant" && (!next || next.role === "user")
+          ? activities.filter((entry) => !entry.messageId)
+          : [];
+        const looseLine = untagged[looseActivity];
+        if (looseLine) looseActivity += 1;
+        const lines = [...ownActivity, ...(looseLine ? [looseLine] : [])].sort(byTime);
         return (
           <Fragment key={item.id}>
             {item.text && (
@@ -64,6 +76,7 @@ export function Transcript({
                 onEdit={item.role === "user" ? onEdit : undefined}
               />
             )}
+            {lines.map((entry) => <Activity key={entry.id} action={entry} appearance={appearance} />)}
             {result?.result && <ResultCard text={result.result} />}
           </Fragment>
         );
@@ -87,9 +100,6 @@ export function Transcript({
           </div>
         </section>
       )}
-      {(active.actions ?? []).filter((item) => settled.has(item.status) && !(failed && item.id === action?.id)).map((item) => (
-        <Activity key={item.id} action={item} appearance={appearance} />
-      ))}
     </Thread>
   );
 }
