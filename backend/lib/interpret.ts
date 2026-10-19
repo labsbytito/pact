@@ -23,12 +23,26 @@ import { mockRaw } from "./mock";
 import { sourceSchema } from "./source";
 import { PACT_STREAM_DELIM, splitStreamReply, streamReplyDelta } from "./stream-parse";
 
-const attachmentSchema = z.object({
+export const attachmentSchema = z.object({
   name: z.string().min(1).max(120),
   mime: z.string().min(3).max(80),
-  kind: z.enum(["text", "image"]),
+  kind: z.enum(["text", "image", "document"]),
   text: z.string().max(24000).optional(),
-  data: z.string().max(550000).optional(),
+  data: z.string().max(1_200_000).optional(),
+}).superRefine((item, ctx) => {
+  const invalid = (message: string) => ctx.addIssue({ code: "custom", message });
+  if (item.kind === "text") {
+    if (item.text === undefined || item.data !== undefined) invalid("Text content is missing.");
+    if (item.text && Buffer.byteLength(item.text) > 24000) invalid("Text exceeds 24KB.");
+    return;
+  }
+  const binary = item.data;
+  if (!binary || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(binary)) {
+    invalid("Invalid base64 attachment."); return;
+  }
+  if (item.kind === "document") {
+    if (item.mime !== "application/pdf" || Buffer.from(binary, "base64").subarray(0, 5).toString() !== "%PDF-") invalid("Invalid PDF attachment.");
+  } else if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(item.mime) || binary.length > 550000) invalid("Unsupported or oversized image.");
 });
 
 export const interpretInput = z.object({
@@ -43,7 +57,7 @@ export const interpretInput = z.object({
       .max(100),
     attachments: z.array(attachmentSchema).max(3).optional(),
   }),
-});
+}).refine((body) => Buffer.byteLength(JSON.stringify(body)) <= 2_000_000, "Request exceeds 2MB.");
 
 export type InterpretPact = z.infer<typeof interpretInput>["pact"];
 type Proposal = {
@@ -83,16 +97,16 @@ export function holdPact(id?: string) {
   return () => thinking.delete(id);
 }
 
-function payload(pact: InterpretPact, actions: ActionStore, tools: Tool[]) {
+export function payload(pact: InterpretPact, actions: ActionStore, tools: Tool[]) {
   const consequentialEnabled = consequentialToolsEnabled();
   const available = tools.filter((tool) => decideTool(tool.name, consequentialEnabled) !== "deny");
   const foQuestion = actions.awaitingAnswer(pact.id);
   const images: ClaudeImage[] = (pact.attachments ?? [])
     .filter(
       (item) =>
-        item.kind === "image" &&
+        (item.kind === "image" || item.kind === "document") &&
         !!item.data &&
-        ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(item.mime),
+        ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"].includes(item.mime),
     )
     .map((item) => ({ mime: item.mime as ClaudeImage["mime"], data: item.data! }));
   const content = JSON.stringify({
@@ -101,6 +115,7 @@ function payload(pact: InterpretPact, actions: ActionStore, tools: Tool[]) {
     foActivity: actions.recentActivity(pact.id),
     pageContext: pact.source,
     conversation: pact.messages.slice(-24),
+    attachments: (pact.attachments ?? []).map(({ name, mime, kind, text }) => ({ name, mime, kind, ...(text !== undefined ? { text } : {}) })),
     ...(foQuestion ? { foQuestion } : {}),
   });
   return { available, foQuestion, images, content, consequentialEnabled };
@@ -163,7 +178,9 @@ export async function finalizeProposal(
       askBefore,
     });
   if (parsed.action.toolName === "ask_fo") {
-    const guarded = guardMessage(explicit ? latest : rawMessage);
+    // Only bypassed research carries a no-commit guard. Reviewed requests must
+    // retain the operation the user actually approved (including email/calls).
+    const guarded = explicit ? guardMessage(latest) : rawMessage;
     parsed.action.arguments = { ...parsed.action.arguments, message: guarded };
     parsed.action.instruction = guarded;
   }

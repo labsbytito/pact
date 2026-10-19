@@ -27,9 +27,9 @@ test("ask_fo and read-only tools are allowed; calls and unknown tools are not", 
   }
 });
 
-test("consequential tools stay off unless the setting is exactly 1", () => {
-  assert.equal(consequentialToolsEnabled({}), false);
-  assert.equal(consequentialToolsEnabled({ PACT_FO_CONSEQUENTIAL: "true" }), false);
-  assert.equal(consequentialToolsEnabled({ PACT_FO_CONSEQUENTIAL: "yes" }), false);
+test("live unfamiliar tools require review by default and an operator can disable them", () => {
+  assert.equal(consequentialToolsEnabled({}), true);
+  assert.equal(consequentialToolsEnabled({ PACT_FO_CONSEQUENTIAL: "0" }), false);
+  assert.equal(consequentialToolsEnabled({ PACT_FO_CONSEQUENTIAL: "yes" }), true);
   assert.equal(consequentialToolsEnabled({ PACT_FO_CONSEQUENTIAL: "1" }), true);
 });

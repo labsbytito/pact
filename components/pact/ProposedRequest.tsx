@@ -23,6 +23,7 @@ export function ProposedRequest({
     <section className="card request" aria-label="Request to Fo">
       <h3>Request to Fo</h3>
       <p className="request-copy">{message}</p>
+      {action.toolName !== "ask_fo" && <details><summary>Review exact {action.toolName} request</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(action.arguments, null, 2)}</pre></details>}
       {signedOut ? (
         <div className="row-actions">
           <p className="meta">Connect Fo first</p>
