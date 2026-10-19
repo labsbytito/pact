@@ -107,3 +107,56 @@ async function loadRelease() {
   } catch { /* The initial pending state remains accurate on network/schema errors. */ }
 }
 void loadRelease();
+
+// ---- Hero motion and reveals (progressive enhancement; static without JS or with reduced motion) ----
+document.documentElement.classList.add('js');
+const reduce = () => motionQuery.matches;
+const revealTargets = document.querySelectorAll('.section-meta, .intro h2, .intro-body, .principles, .section-heading, .demo-tabs, .demo-panel, .connection-copy, .cmap, .control-heading, .control-row, .install-grid > *, .quick-start h2, .faq details, .finale .wrap > *');
+revealTargets.forEach(el => el.setAttribute('data-reveal', ''));
+if ('IntersectionObserver' in window && !reduce()) {
+  const seen = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('in'); seen.unobserve(entry.target); } }), { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+  revealTargets.forEach(el => seen.observe(el));
+} else revealTargets.forEach(el => el.classList.add('in'));
+
+const hero = document.querySelector('.hero');
+if (hero && matchMedia('(hover:hover) and (pointer:fine)').matches) {
+  let frame = 0;
+  hero.addEventListener('pointermove', event => {
+    if (reduce() || frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const box = hero.getBoundingClientRect();
+      hero.style.setProperty('--px', ((event.clientX - box.left) / box.width - .5).toFixed(3));
+      hero.style.setProperty('--py', ((event.clientY - box.top) / box.height - .5).toFixed(3));
+    });
+  });
+  hero.addEventListener('pointerleave', () => { hero.style.setProperty('--px', 0); hero.style.setProperty('--py', 0); });
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const typed = document.querySelector('#hero-typed');
+const proposal = document.querySelector('#hero-proposal');
+const status = document.querySelector('#hero-status');
+if (typed && proposal && status && !reduce()) {
+  const prompts = ['“Turn this page into a plan for Saturday.”', '“What should I ask Fo about this listing?”', '“Summarise this video, then draft a reply.”'];
+  const proposals = [
+    ['Research the route and travel options for Saturday.', 'Illustrative proposal · Approval happens in Pact'],
+    ['Draft a short note to the host asking about parking.', 'Illustrative proposal · You review before anything is sent'],
+    ['Add the walk to your calendar for Saturday at 10:00.', 'Illustrative proposal · Nothing happens until you approve']
+  ];
+  (async () => {
+    await sleep(2600);
+    for (let i = 1; !reduce(); i = (i + 1) % prompts.length) {
+      typed.classList.add('type-caret');
+      for (let n = typed.textContent.length; n > 0; n -= 2) { typed.textContent = typed.textContent.slice(0, Math.max(0, n - 2)); await sleep(16); }
+      await sleep(260);
+      for (let n = 1; n <= prompts[i].length; n++) { typed.textContent = prompts[i].slice(0, n); await sleep(34); }
+      typed.classList.remove('type-caret');
+      proposal.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, fill: 'forwards' }).finished.then(() => {
+        proposal.textContent = proposals[i][0]; status.textContent = proposals[i][1];
+        proposal.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 380, fill: 'forwards' });
+      });
+      await sleep(5200);
+    }
+  })();
+}
