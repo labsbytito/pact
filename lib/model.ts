@@ -18,11 +18,20 @@ export type Source = {
   transcriptPartial?: boolean;
   transcriptStatus: "available" | "unavailable" | "not-video";
 };
+export type Attachment = {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  text?: string;
+  truncated?: boolean;
+};
 export type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
   at: string;
+  attachments?: Attachment[];
 };
 export type Action = {
   id: string;
@@ -58,7 +67,10 @@ export type Pact = {
   action?: Action;
   actions?: Action[];
   archived?: boolean;
+  sectionId?: string;
+  titleEdited?: boolean;
 };
+export type Section = { id: string; name: string };
 export type Settings = { onboarded: boolean };
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();

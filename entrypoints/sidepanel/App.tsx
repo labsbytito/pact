@@ -19,6 +19,7 @@ import {
   Loader2,
   ExternalLink,
   Paperclip,
+  FileUp,
   AudioLines,
   ShieldCheck,
   Compass,
@@ -27,7 +28,26 @@ import {
   MoreHorizontal,
   MousePointer2,
 } from "lucide-react";
-import type { Action, Pact, Source, Settings } from "../../lib/model";
+import type {
+  Action,
+  Attachment,
+  Pact,
+  Section,
+  Source,
+  Settings,
+} from "../../lib/model";
+import {
+  FILE_COUNT,
+  createSection,
+  deletePact,
+  describeAttachment,
+  groupedPacts,
+  isTextFile,
+  movePact,
+  removeSection,
+  renamePact,
+  markArchived,
+} from "../../lib/chats";
 import {
   uid,
   now,
@@ -194,7 +214,15 @@ export default function App() {
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
     [archived, setArchived] = useState(false),
-    [listening, setListening] = useState(false),
+    [sections, setSections] = useState<Section[]>([]),
+    [pendingFiles, setPendingFiles] = useState<Attachment[]>([]),
+    [manage, setManage] = useState<
+      | { mode: "menu" | "rename" | "move" | "delete"; pactId: string }
+      | undefined
+    >(),
+    [naming, setNaming] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [listening, setListening] = useState(false),
     [health, setHealth] = useState<Health>({ ai: false, fo: false, tools: [] }),
     [companionOnline, setCompanionOnline] = useState(false),
     [connecting, setConnecting] = useState(false),
@@ -213,10 +241,19 @@ export default function App() {
     writeQueue = useRef(Promise.resolve());
   const active = pacts.find((p) => p.id === selected);
   const currentSource = active ? active.source : source;
+  const matches = (p: Pact) => {
+    const section =
+      sections.find((item) => item.id === p.sectionId)?.name ?? "";
+    const files = p.messages
+      .flatMap((message) => message.attachments ?? [])
+      .map((file) => file.name)
+      .join(" ");
+    return `${p.title} ${p.intention} ${section} ${files}`
+      .toLowerCase()
+      .includes(search.toLowerCase());
+  };
   const visible = pacts.filter(
-    (p) =>
-      !!p.archived === archived &&
-      `${p.title} ${p.intention}`.toLowerCase().includes(search.toLowerCase()),
+    (p) => !!p.archived === archived && matches(p),
   );
   useEffect(() => {
     let cancelled = false;
@@ -224,8 +261,9 @@ export default function App() {
       read<Pact[]>("pacts", []),
       read<Settings>("settings", { onboarded: false }),
       read<string | null>("activePact", null),
+      read<Section[]>("sections", []),
     ])
-      .then(([stored, s, last]) => {
+      .then(([stored, s, last, storedSections]) => {
         if (cancelled) return;
         const p = withCharacterSeeds(stored);
         setPacts(p);
@@ -233,6 +271,7 @@ export default function App() {
         if (stored.some((item) => !item.characterSeed))
           void save(p).catch(() => {});
         setSettings(s);
+        setSections(Array.isArray(storedSections) ? storedSections : []);
         if (last && p.some((item) => item.id === last && !item.archived))
           setSelected(last);
         setLoaded(true);
@@ -398,6 +437,42 @@ export default function App() {
       ),
     );
   }
+  async function saveSections(next: Section[]) {
+    setSections(next);
+    await write("sections", next);
+  }
+  function managed() {
+    return pacts.find((pact) => pact.id === manage?.pactId);
+  }
+  async function applyPact(next: Pact) {
+    await update(next);
+    setManage(undefined);
+  }
+  async function chooseFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const room = FILE_COUNT - pendingFiles.length;
+    const errors: string[] = [];
+    const added: Attachment[] = [];
+    for (const file of [...list].slice(0, Math.max(room, 0))) {
+      const text = isTextFile(file.name, file.type)
+        ? await file.text()
+        : undefined;
+      const described = describeAttachment({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        text,
+      });
+      if (described.error) errors.push(described.error);
+      else if (described.attachment) added.push(described.attachment);
+    }
+    if (list.length > room)
+      errors.push("You can attach up to 4 files on a message.");
+    if (added.length)
+      setPendingFiles((current) => [...current, ...added].slice(0, FILE_COUNT));
+    if (errors[0]) setError(errors[0]);
+    if (fileInput.current) fileInput.current.value = "";
+  }
   async function onboard() {
     const s = { onboarded: true };
     setSettings(s);
@@ -412,6 +487,7 @@ export default function App() {
     setView("chat");
     setSource(undefined);
     setDraft("");
+    setPendingFiles([]);
     setError("");
     composer.current?.focus();
   }
@@ -423,6 +499,7 @@ export default function App() {
     setSelected(p.id);
     setView("chat");
     setDraft("");
+    setPendingFiles([]);
     setError("");
   }
   async function capture(mode: CaptureMode = "page") {
@@ -470,12 +547,15 @@ export default function App() {
       ? `Read ${captureAge} min ago · saved snapshot`
       : "Read just now · saved snapshot";
   async function send() {
-    if (!draft.trim() || busy || capturing) return;
+    const text = draft.trim();
+    if ((!text && !pendingFiles.length) || busy || capturing) return;
     initialCaptureAllowed.current = false;
     setBusy(true);
     setError("");
-    const text = draft.trim();
+    const spoken = text || pendingFiles.map((file) => file.name).join(", ");
+    const files = pendingFiles;
     setDraft("");
+    setPendingFiles([]);
     let p: Pact;
     try {
       if (active?.action?.status === "proposed" && active.action.planId) {
@@ -484,9 +564,13 @@ export default function App() {
         );
       }
       const base = active ? supersedeProposal(active) : undefined;
+      const user = { ...message("user", text), attachments: files };
       p = base
-        ? { ...base, messages: [...base.messages, message("user", text)] }
-        : makePact(text, source, pactsRef.current);
+        ? { ...base, messages: [...base.messages, user] }
+        : {
+            ...makePact(spoken, source, pactsRef.current),
+            messages: [{ ...user, id: uid() }],
+          };
       if (active) await update(p);
       else {
         await save([p, ...pactsRef.current]);
@@ -504,6 +588,7 @@ export default function App() {
       }
     } catch (e) {
       setDraft(text);
+      setPendingFiles(files);
       setError(errorText(e));
     } finally {
       setBusy(false);
@@ -696,6 +781,7 @@ export default function App() {
     setSettingsOpen(false);
     setSourceOpen(false);
     setReviewOpen(false);
+    setManage(undefined);
   };
   useEffect(() => {
     function key(e: KeyboardEvent) {
@@ -749,35 +835,40 @@ export default function App() {
         <p className="recent-label">Recent</p>
         <div className="recent-list">
           {pacts
-            .filter(
-              (p) =>
-                !p.archived &&
-                `${p.title} ${p.intention}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-            )
+            .filter((p) => !p.archived && matches(p))
             .slice(0, 30)
             .map((p, i) => (
-              <button
+              <div
                 key={p.id}
                 className={`recent ${selected === p.id && view === "chat" ? "selected" : ""}`}
-                onClick={() => openPact(p)}
               >
-                <span className={`thread-avatar tone-${i % 4}`}>
-                  <Companion seed={p.characterSeed ?? p.id} size="small" />
-                </span>
-                <span>
-                  <strong>{p.title}</strong>
-                  <small>
-                    {p.action && unresolved(p.action)
-                      ? statusText(p.action)
-                      : (p.messages.at(-1)?.text ?? p.intention)}
-                  </small>
-                </span>
-                {p.action?.status === "running" && (
-                  <span className="status-light" />
-                )}
-              </button>
+                <button className="recent-open" onClick={() => openPact(p)}>
+                  <span className={`thread-avatar tone-${i % 4}`}>
+                    <Companion seed={p.characterSeed ?? p.id} size="small" />
+                  </span>
+                  <span>
+                    <strong>{p.title}</strong>
+                    <small>
+                      {sections.find((item) => item.id === p.sectionId)?.name
+                        ? `${sections.find((item) => item.id === p.sectionId)?.name} · `
+                        : ""}
+                      {p.action && unresolved(p.action)
+                        ? statusText(p.action)
+                        : (p.messages.at(-1)?.text ?? p.intention)}
+                    </small>
+                  </span>
+                  {p.action?.status === "running" && (
+                    <span className="status-light" />
+                  )}
+                </button>
+                <button
+                  className="icon-button conversation-options"
+                  aria-label={`Options for ${p.title}`}
+                  onClick={() => setManage({ mode: "menu", pactId: p.id })}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+              </div>
             ))}
           {!pacts.filter((p) => !p.archived).length && (
             <p className="quiet-empty">Your conversations will appear here.</p>
@@ -886,43 +977,83 @@ export default function App() {
                 <Archive size={17} />
                 {archived ? "Archived" : "Archive"}
               </button>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setNaming("");
+                  setManage({ mode: "move", pactId: "" });
+                }}
+              >
+                <Plus size={15} /> Section
+              </button>
             </div>
-            <div className="pact-grid">
-              {visible.map((p, i) => (
-                <button
-                  className="pact-tile"
-                  key={p.id}
-                  onClick={() => openPact(p)}
-                >
-                  <span className={`tile-avatar tone-${i % 4}`}>
-                    <Companion seed={p.characterSeed ?? p.id} size="normal" />
-                  </span>
-                  <span className="tile-copy">
-                    <span className="tile-heading">
-                      <strong>{p.title}</strong>
-                      <time>
-                        {new Date(p.updatedAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </time>
-                    </span>
-                    <span className="tile-preview">
-                      {p.messages.at(-1)?.text ?? p.intention}
-                    </span>
-                    <span className="tile-footer">
-                      {host(p.source) || statusText(p.action)}
-                      {p.action && unresolved(p.action) && (
-                        <span className="run-label">
-                          {statusText(p.action)}
+            {groupedPacts(visible, sections).map((group) => (
+              <div className="pact-grid" key={group.section?.id ?? "loose"}>
+                {(group.section || sections.length > 0) && (
+                  <div className="section-heading">
+                    <h2>{group.section?.name ?? "Conversations"}</h2>
+                    {group.section && (
+                      <button
+                        className="text-button"
+                        onClick={async () => {
+                          const next = removeSection(
+                            sections,
+                            pactsRef.current,
+                            group.section!.id,
+                          );
+                          await save(next.pacts);
+                          await saveSections(next.sections);
+                        }}
+                      >
+                        Remove section
+                      </button>
+                    )}
+                  </div>
+                )}
+                {group.pacts.map((p, i) => (
+                  <div className="pact-tile" key={p.id}>
+                    <button className="tile-open" onClick={() => openPact(p)}>
+                      <span className={`tile-avatar tone-${i % 4}`}>
+                        <Companion seed={p.characterSeed ?? p.id} size="normal" />
+                      </span>
+                      <span className="tile-copy">
+                        <span className="tile-heading">
+                          <strong>{p.title}</strong>
+                          <time>
+                            {new Date(p.updatedAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </time>
                         </span>
-                      )}
-                    </span>
-                  </span>
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-            </div>
+                        <span className="tile-preview">
+                          {p.messages.at(-1)?.text ?? p.intention}
+                        </span>
+                        <span className="tile-footer">
+                          {host(p.source) || statusText(p.action)}
+                          {p.action && unresolved(p.action) && (
+                            <span className="run-label">
+                              {statusText(p.action)}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <ChevronRight size={15} />
+                    </button>
+                    <button
+                      className="icon-button conversation-options"
+                      aria-label={`Options for ${p.title}`}
+                      onClick={() => setManage({ mode: "menu", pactId: p.id })}
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </div>
+                ))}
+                {group.section && !group.pacts.length && (
+                  <p className="quiet-empty">Nothing in this section yet.</p>
+                )}
+              </div>
+            ))}
             {!visible.length && (
               <div className="library-empty">
                 <Companion size="normal" />
@@ -1073,7 +1204,28 @@ export default function App() {
                           {m.role === "assistant" ? (
                             <ReadableReply text={m.text} />
                           ) : (
-                            <p>{m.text}</p>
+                            <>
+                              {m.text && <p>{m.text}</p>}
+                              {!!m.attachments?.length && (
+                                <ul className="file-list">
+                                  {m.attachments.map((file) => (
+                                    <li key={file.id}>
+                                      <FileUp size={14} />
+                                      <span>
+                                        {file.name}
+                                        <small>
+                                          {file.text
+                                            ? file.truncated
+                                              ? "Excerpt saved"
+                                              : "Text saved"
+                                            : "File saved"}
+                                        </small>
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </>
                           )}
                           <time>
                             {new Date(m.at).toLocaleTimeString(undefined, {
@@ -1205,17 +1357,38 @@ export default function App() {
                     ) : null}
                     <div className="thread-tools">
                       <button
+                        onClick={() => {
+                          setNaming(active.title);
+                          setManage({ mode: "rename", pactId: active.id });
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNaming("");
+                          setManage({ mode: "move", pactId: active.id });
+                        }}
+                      >
+                        Move
+                      </button>
+                      <button
                         onClick={async () => {
-                          await update({
-                            ...active,
-                            archived: !active.archived,
-                          });
+                          await update(markArchived(active, !active.archived));
                           setSelected(undefined);
                           setView("library");
+                          setArchived(!!active.archived ? false : true);
                         }}
                       >
                         <Archive size={14} />
                         {active.archived ? "Restore Pact" : "Archive Pact"}
+                      </button>
+                      <button
+                        onClick={() =>
+                          setManage({ mode: "delete", pactId: active.id })
+                        }
+                      >
+                        Delete
                       </button>
                       <span>
                         Saved on your device <Check size={13} />
@@ -1316,6 +1489,32 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {!!pendingFiles.length && (
+                <ul className="file-list pending-files">
+                  {pendingFiles.map((file) => (
+                    <li key={file.id}>
+                      <FileUp size={14} />
+                      <span>
+                        {file.name}
+                        <small>
+                          {file.text ? "Ready to send" : "Name only"}
+                        </small>
+                      </span>
+                      <button
+                        className="icon-button"
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() =>
+                          setPendingFiles((current) =>
+                            current.filter((item) => item.id !== file.id),
+                          )
+                        }
+                      >
+                        <X size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className={`composer ${listening ? "listening" : ""}`}>
                 <textarea
                   ref={composer}
@@ -1359,6 +1558,23 @@ export default function App() {
                   <span>
                     {currentSource ? "Page attached" : "Attach current page"}
                   </span>
+                  <input
+                    ref={fileInput}
+                    className="sr-only"
+                    type="file"
+                    multiple
+                    aria-label="Choose files"
+                    onChange={(e) => void chooseFiles(e.target.files)}
+                  />
+                  <button
+                    className="icon-button"
+                    title="Upload files"
+                    aria-label="Upload files"
+                    onClick={() => fileInput.current?.click()}
+                    disabled={pendingFiles.length >= FILE_COUNT}
+                  >
+                    <FileUp size={19} />
+                  </button>
                   <button
                     className={`icon-button mic-button ${listening ? "active" : ""}`}
                     title={listening ? "Stop dictation" : "Dictate a message"}
@@ -1372,7 +1588,11 @@ export default function App() {
                   </button>
                   <button
                     className="send-button"
-                    disabled={!draft.trim() || busy || capturing}
+                    disabled={
+                      (!draft.trim() && !pendingFiles.length) ||
+                      busy ||
+                      capturing
+                    }
                     onClick={send}
                     aria-label="Send message"
                   >
@@ -1714,6 +1934,179 @@ export default function App() {
                 </button>
               </>
             ) : null}
+          </section>
+        </div>
+      )}
+      {manage && (
+        <div className="modal-backdrop" onClick={closeDialog}>
+          <section
+            className="dialog"
+            role="dialog"
+            aria-labelledby="manage-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <h2 id="manage-title">
+                {manage.mode === "rename"
+                  ? "Rename Pact"
+                  : manage.mode === "delete"
+                    ? "Delete Pact"
+                    : manage.mode === "move"
+                      ? manage.pactId
+                        ? "Move to a section"
+                        : "New section"
+                      : "Conversation"}
+              </h2>
+              <button
+                className="icon-button"
+                aria-label="Close dialog"
+                onClick={closeDialog}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            {manage.mode === "menu" && managed() && (
+              <div className="manage-actions">
+                <button
+                  className="secondary full"
+                  onClick={() => {
+                    setNaming(managed()!.title);
+                    setManage({ mode: "rename", pactId: manage.pactId });
+                  }}
+                >
+                  Rename
+                </button>
+                <button
+                  className="secondary full"
+                  onClick={() => {
+                    setNaming("");
+                    setManage({ mode: "move", pactId: manage.pactId });
+                  }}
+                >
+                  Move to section
+                </button>
+                <button
+                  className="secondary full"
+                  onClick={async () => {
+                    const pact = managed();
+                    if (!pact) return;
+                    await update(markArchived(pact, !pact.archived));
+                    if (selected === pact.id) {
+                      setSelected(undefined);
+                      setView("library");
+                    }
+                    setArchived(!pact.archived);
+                    setManage(undefined);
+                  }}
+                >
+                  {managed()?.archived ? "Restore" : "Archive"}
+                </button>
+                <button
+                  className="secondary full"
+                  onClick={() =>
+                    setManage({ mode: "delete", pactId: manage.pactId })
+                  }
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+            {manage.mode === "rename" && managed() && (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const pact = managed();
+                  if (!pact) return;
+                  try {
+                    await applyPact(renamePact(pact, naming));
+                  } catch (e) {
+                    setError(errorText(e));
+                  }
+                }}
+              >
+                <input
+                  aria-label="Pact name"
+                  value={naming}
+                  maxLength={80}
+                  onChange={(e) => setNaming(e.target.value)}
+                />
+                <button className="primary full" type="submit">
+                  Save name
+                </button>
+              </form>
+            )}
+            {manage.mode === "move" && (
+              <div className="manage-actions">
+                {managed() && (
+                  <>
+                    <button
+                      className="secondary full"
+                      onClick={() => void applyPact(movePact(managed()!))}
+                    >
+                      Conversations
+                    </button>
+                    {sections.map((section) => (
+                      <button
+                        key={section.id}
+                        className="secondary full"
+                        onClick={() =>
+                          void applyPact(movePact(managed()!, section.id))
+                        }
+                      >
+                        {section.name}
+                      </button>
+                    ))}
+                  </>
+                )}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      const next = createSection(sections, naming);
+                      await saveSections(next);
+                      const created = next[next.length - 1];
+                      const pact = managed();
+                      if (pact && created)
+                        await applyPact(movePact(pact, created.id));
+                      else setManage(undefined);
+                      setNaming("");
+                    } catch (e) {
+                      setError(errorText(e));
+                    }
+                  }}
+                >
+                  <input
+                    aria-label="New section name"
+                    placeholder="New section"
+                    value={naming}
+                    maxLength={40}
+                    onChange={(e) => setNaming(e.target.value)}
+                  />
+                  <button className="primary full" type="submit">
+                    {managed() ? "Create and move" : "Create section"}
+                  </button>
+                </form>
+              </div>
+            )}
+            {manage.mode === "delete" && managed() && (
+              <div className="manage-actions">
+                <p className="setting-description">
+                  Delete “{managed()!.title}” from this device. This does not
+                  cancel anything Fo has already accepted.
+                </p>
+                <button
+                  className="primary full"
+                  onClick={async () => {
+                    const id = manage.pactId;
+                    await save(deletePact(pactsRef.current, id));
+                    if (selected === id) setSelected(undefined);
+                    setManage(undefined);
+                  }}
+                >
+                  Delete Pact
+                </button>
+              </div>
+            )}
           </section>
         </div>
       )}
