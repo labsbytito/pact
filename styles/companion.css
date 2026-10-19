@@ -1,35 +1,63 @@
-.blob { display: inline-grid; place-items: center; }
+.blob { display: inline-grid; place-items: center; position: relative; color: var(--text-2); }
 .blob svg { display: block; overflow: visible; }
-.blob-body { transform-origin: 50% 100%; transform-box: fill-box; }
+.blob-body, .blob-pop { transform-origin: 50% 100%; transform-box: fill-box; }
 .blob-face { transform-origin: center; transform-box: view-box; }
-.blob[data-motion="on"][data-bob="idle"] .blob-body,
-.blob[data-motion="on"][data-bob="greeting"] .blob-body { animation: bob 3s ease-in-out infinite; }
-.blob[data-motion="on"][data-bob="happy"] .blob-body { animation: bob 2.1s ease-in-out infinite; }
-.blob[data-motion="on"][data-bob="thinking"] .blob-body { animation: sway 2.6s ease-in-out infinite; }
-.blob[data-motion="on"][data-bob="sleepy"] .blob-body { animation: breathe 5.5s ease-in-out infinite; }
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+/* Body loops: squash-and-stretch, never a flat translate. */
+.blob[data-motion="on"] .blob-body { animation: idle-breathe 3.6s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="greeting"] .blob-body { animation: hop 3.2s cubic-bezier(.3,.7,.4,1) infinite; }
+.blob[data-motion="on"][data-bob="happy"] .blob-body { animation: hop 1.9s cubic-bezier(.3,.7,.4,1) infinite; }
+.blob[data-motion="on"][data-bob="thinking"] .blob-body { animation: ponder 2.8s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="listening"] .blob-body { animation: lean-in 1.5s ease-in-out infinite; }
+.blob[data-motion="on"][data-state="speaking"] .blob-body { animation: talk 0.9s ease-in-out infinite; }
+.blob[data-motion="on"][data-bob="sleepy"] .blob-body,
+.blob[data-motion="on"][data-state="sleepy"] .blob-body { animation: breathe 6.5s ease-in-out infinite; }
+.blob[data-motion="on"][data-state="error"] .blob-body { animation: none; }
+.blob[data-motion="on"][data-state="error"] .blob-pop { animation: shake 420ms ease-in-out 1; }
+/* One-shot spring whenever the state changes (alternating names restart it). */
+.blob[data-motion="on"] .blob-pop[data-pop="0"] { animation: pop-a 520ms cubic-bezier(.34,1.56,.64,1) 1; }
+.blob[data-motion="on"] .blob-pop[data-pop="1"] { animation: pop-b 520ms cubic-bezier(.34,1.56,.64,1) 1; }
+@keyframes pop-a { 0% { transform: scale(.86,1.12); } 55% { transform: scale(1.06,.94); } 100% { transform: scale(1,1); } }
+@keyframes pop-b { 0% { transform: scale(.86,1.12); } 55% { transform: scale(1.06,.94); } 100% { transform: scale(1,1); } }
+@keyframes idle-breathe { 0%,100% { transform: scale(1,1); } 50% { transform: scale(1.025,.972); } }
+@keyframes hop {
+  0%,100% { transform: translateY(0) scale(1.04,.95); }
+  18% { transform: translateY(0) scale(.97,1.04); }
+  42% { transform: translateY(-.12em) scale(.97,1.05); }
+  60% { transform: translateY(0) scale(1.05,.94); }
+  74% { transform: translateY(0) scale(1,1); }
 }
-@keyframes sway {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
-}
-.blob[data-motion="on"][data-state="speaking"] .blob-body { animation: speak 1.8s ease-in-out infinite; }
-.blob[data-motion="on"][data-state="sleepy"] .blob-body { animation: breathe 7s ease-in-out infinite; }
+@keyframes ponder { 0%,100% { transform: rotate(-4deg) scale(1,1); } 50% { transform: rotate(4deg) scale(1.02,.98); } }
+@keyframes lean-in { 0%,100% { transform: scale(1.02,.98) translateY(0); } 50% { transform: scale(1.06,.95) translateY(.01em); } }
+@keyframes talk { 0%,100% { transform: scale(1,1); } 30% { transform: scale(1.03,.97); } 65% { transform: scale(.98,1.025) translateY(-.015em); } }
+@keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-.04em); } 40% { transform: translateX(.04em); } 60% { transform: translateX(-.025em); } 80% { transform: translateX(.02em); } }
 .blob[data-motion="reduced"] .blob-body { animation: breathe 8s ease-in-out infinite; }
 .blob[data-motion="off"] .blob-body,
-.blob[data-live="off"] .blob-body { animation: none; }
+.blob[data-motion="off"] .blob-pop,
+.blob[data-live="off"] .blob-body,
+.blob[data-live="off"] .blob-pop { animation: none; }
 .blob .eye, .blob .look { transform-origin: center; transform-box: fill-box; }
-.blob[data-motion="on"] .look { transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1); }
-@keyframes breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.012); }
+.blob .eye { transition: transform 90ms ease-out; }
+.blob[data-motion="on"] .look { transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1); }
+.blob[data-state="listening"] .eye { transform: scale(1.14) !important; }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
+/* Listening: soft ripples; thinking: rising thought dots; sleepy: drifting z's. */
+.blob[data-motion="on"][data-state="listening"]::after,
+.blob[data-motion="on"][data-state="listening"]::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid currentColor; opacity: 0; pointer-events: none;
+  animation: ripple 1.8s ease-out infinite;
 }
-@keyframes speak {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.018); }
-}
+.blob[data-motion="on"][data-state="listening"]::before { animation-delay: .9s; }
+@keyframes ripple { 0% { transform: scale(.9); opacity: .45; } 100% { transform: scale(1.7); opacity: 0; } }
+.blob .thought circle { opacity: .15; animation: thought 1.5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.blob .thought circle:nth-child(2) { animation-delay: .22s; }
+.blob .thought circle:nth-child(3) { animation-delay: .44s; }
+@keyframes thought { 0%,100% { opacity: .15; transform: scale(.7); } 40% { opacity: .75; transform: scale(1.1); } }
+.blob .zzz text { opacity: 0; animation: zzz 3.4s ease-in-out infinite; }
+.blob .zzz text:nth-child(2) { animation-delay: 1.1s; }
+@keyframes zzz { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: .7; } 100% { opacity: 0; transform: translateY(-8px); } }
+html[data-motion="reduced"] .blob .thought circle, html[data-motion="off"] .blob .thought circle,
+html[data-motion="reduced"] .blob .zzz text, html[data-motion="off"] .blob .zzz text { animation: none; opacity: .5; }
 .glass {
   background: var(--glass-bg);
   border: 1px solid var(--glass-edge);
@@ -53,10 +81,11 @@
   .glass { background: var(--glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 html[data-motion="off"] .blob-body,
+html[data-motion="off"] .blob-pop,
 html[data-motion="off"] .dots i,
 html[data-motion="reduced"] .blob-body { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .blob-body, .live-dot, .msg, .dots i { animation: none !important; }
+  .blob-body, .blob-pop, .blob::before, .blob::after, .live-dot, .msg, .dots i { animation: none !important; }
 }
 html[data-motion="reduced"] .glass,
 html[data-motion="off"] .glass {

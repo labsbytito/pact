@@ -32,6 +32,8 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
   async function attach(files: File[]) {
     if (files.length + attachments.length > ATTACHMENT_LIMITS.maxFiles) { setError("Attach up to 3 files at a time."); return; }
     setPreparing(true); setError("");
@@ -50,7 +52,19 @@ export function Composer({
     el.form?.toggleAttribute("data-multiline", next > 56);
   }, [value]);
   return (
-    <div className="composer-wrap">
+    <div
+      className="composer-wrap"
+      data-dragging={dragging || undefined}
+      onDragEnter={(event) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); depth.current += 1; setDragging(true); }}
+      onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+      onDragLeave={() => { depth.current = Math.max(0, depth.current - 1); if (!depth.current) setDragging(false); }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault(); depth.current = 0; setDragging(false);
+        if (!streaming && !preparing) void attach(Array.from(event.dataTransfer.files));
+      }}
+    >
+      {dragging && <div className="drop-hint" aria-hidden="true">Drop to attach</div>}
       <input ref={picker} type="file" multiple accept={ATTACHMENT_LIMITS.accept} hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void attach(files); }} />
       {attachments.length > 0 && <div className="attachment-list">{attachments.map((file) => <span className="attachment-chip" key={file.id}><Paperclip size={13} aria-hidden="true" /><span>{file.name}</span><button type="button" aria-label={`Remove ${file.name}`} disabled={preparing || streaming} onClick={() => onAttachments?.(attachments.filter((item) => item.id !== file.id))}><X size={13} /></button></span>)}</div>}
       {preparing && <p className="conn-note" role="status">Reading files…</p>}
@@ -80,6 +94,12 @@ export function Composer({
           placeholder="Message Pact"
           aria-label="Message Pact"
           onChange={(event) => onChange(event.target.value)}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files);
+            if (!files.length || streaming || preparing) return;
+            event.preventDefault();
+            void attach(files);
+          }}
           onKeyDown={(event) => {
             const command = event.metaKey || event.ctrlKey;
             if (event.key !== "Enter" || event.shiftKey || streaming || preparing || event.nativeEvent.isComposing) return;

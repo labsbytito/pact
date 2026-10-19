@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openMicPermissionPage, probeMicrophone, queryMicPermission } from "../lib/mic";
 
 type Rec = {
@@ -23,6 +23,17 @@ export function useDictation(
 ) {
   const [listening, setListening] = useState(false);
   const recRef = useRef<Rec | null>(null);
+  const baseRef = useRef("");
+  const latest = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    // The grant page tells us when the mic is allowed, so start straight away instead of asking for a second tap.
+    const onMessage = (message: { type?: string }) => {
+      if (message?.type === "pact-mic-granted") void latest.current();
+    };
+    if (typeof chrome === "undefined" || !chrome.runtime?.onMessage) return;
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, []);
 
   async function dictate() {
     if (listening) {
@@ -69,16 +80,26 @@ export function useDictation(
     const recognition = new Speech();
     recognition.lang = navigator.language || "en";
     recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onstart = () => setListening(true);
+    recognition.continuous = true;
+    recognition.onstart = () => {
+      setListening(true);
+      setDraft((current) => {
+        baseRef.current = current;
+        return current;
+      });
+    };
     recognition.onresult = (event) => {
       let finalText = "";
+      let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const piece = event.results[i]?.[0]?.transcript ?? "";
         if (event.results[i]?.isFinal) finalText += piece;
+        else interim += piece;
       }
-      if (finalText.trim())
-        setDraft((current) => `${current}${current ? " " : ""}${finalText.trim()}`);
+      const join = (base: string, text: string) => (text.trim() ? `${base}${base && !/\s$/.test(base) ? " " : ""}${text.trim()}` : base);
+      if (finalText.trim()) baseRef.current = join(baseRef.current, finalText);
+      // Words appear as they are spoken; the draft settles when the phrase is final.
+      setDraft(join(baseRef.current, interim));
     };
     recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed")
@@ -97,5 +118,6 @@ export function useDictation(
     }
   }
 
+  latest.current = dictate;
   return { listening, dictate };
 }
