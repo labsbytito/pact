@@ -141,7 +141,7 @@ export function parseModelReply(raw: string): unknown {
 }
 
 export type ClaudeImage = {
-  mime: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  mime: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "application/pdf";
   data: string;
 };
 
@@ -169,6 +169,7 @@ async function completeClaude(
   reserved: number,
 ): Promise<string> {
   if (provider() === "claude-code") {
+    if (images.length) throw new AiError("Images and PDFs require the hosted Claude API. Use a text attachment here.", 400);
     const cliContent =
       images.length === 0
         ? content
@@ -285,7 +286,7 @@ export function buildMessageContent(
   if (images.length === 0) return content;
   return [
     ...images.slice(0, 3).map((image) => ({
-      type: "image" as const,
+      type: image.mime === "application/pdf" ? "document" as const : "image" as const,
       source: {
         type: "base64" as const,
         media_type: image.mime,

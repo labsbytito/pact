@@ -1,24 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Calendar, Link2, Mail, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { connectFo, disconnectFo, deleteInstall, loadFoStatus } from "../../lib/backend";
-
-const INTERNAL = new Set([
-  "ask_fo",
-  "get_fo_conversation",
-  "get_fo_reply",
-  "list_fo_conversations",
-  "start_fo_call",
-]);
-
-function glyph(Icon: typeof Mail) {
-  return <Icon size={16} strokeWidth={1.75} aria-hidden="true" />;
-}
-
-function labelFor(name: string) {
-  return name
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 export function Connections({
   fo,
@@ -32,7 +14,7 @@ export function Connections({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
   const [tools, setTools] = useState<{ name: string; description?: string; url?: string }[]>([]);
-  const [guidance, setGuidance] = useState("");
+
   const signedIn = fo === "signed in";
 
   async function refreshStatus() {
@@ -73,59 +55,12 @@ export function Connections({
     }
   }
 
-  function serviceConnected(pattern: RegExp) {
-    return tools.some((tool) => pattern.test(tool.name) && !INTERNAL.has(tool.name));
-  }
-
-  function exposedUrl(pattern: RegExp) {
-    for (const tool of tools) {
-      if (INTERNAL.has(tool.name) || !pattern.test(`${tool.name} ${tool.description ?? ""}`)) continue;
-      if (tool.url && /^https:\/\//.test(tool.url)) return tool.url;
-      const found = tool.description?.match(/https:\/\/[^\s)]+/);
-      if (found) return found[0];
-    }
-    return undefined;
-  }
-
-  async function openFo() {
-    const result = await connectFo();
-    if (result.url) {
-      await chrome.tabs.create({ url: result.url });
-      onRefresh?.();
-      return true;
-    }
-    return false;
-  }
-
-  async function connectService(id: string, name: string, pattern: RegExp) {
-    await run(id, async () => {
-      const direct = exposedUrl(pattern);
-      if (direct) {
-        await chrome.tabs.create({ url: direct });
-        setGuidance("");
-        return;
-      }
-      if (await openFo()) {
-        setGuidance("");
-        return;
-      }
-      setGuidance(name);
-    });
-  }
-
-  const extras = tools.filter((tool) => {
-    if (INTERNAL.has(tool.name)) return false;
-    if (/gmail|google.?mail|inbox/i.test(tool.name)) return false;
-    if (/calendar/i.test(tool.name)) return false;
-    return true;
-  });
-
   return (
     <>
       <div className="group-label">Services</div>
       <div className="group">
         <ServiceRow
-          icon={glyph(Sparkles)}
+          icon={<Sparkles size={16} aria-hidden="true" />}
           name="Fo"
           status={signedIn ? "Connected" : "Not connected"}
           action={signedIn ? "Disconnect" : "Connect"}
@@ -143,45 +78,12 @@ export function Connections({
             void run("fo", connectAccount);
           }}
         />
-        <ServiceRow
-          icon={glyph(Mail)}
-          name="Gmail"
-          status={serviceConnected(/gmail|google.?mail/i) ? "Connected" : "Not connected"}
-          action="Connect"
-          disabled={busy === "gmail"}
-          onAction={() => void connectService("gmail", "Gmail", /gmail|google.?mail/i)}
-        />
-        <ServiceRow
-          icon={glyph(Calendar)}
-          name="Google Calendar"
-          status={serviceConnected(/calendar/i) ? "Connected" : "Not connected"}
-          action="Connect"
-          disabled={busy === "calendar"}
-          onAction={() => void connectService("calendar", "Google Calendar", /calendar/i)}
-        />
-        {extras.map((tool) => (
-          <ServiceRow
-            key={tool.name}
-            icon={glyph(Link2)}
-            name={labelFor(tool.name)}
-            status="Not connected"
-            action="Connect"
-            disabled={busy === tool.name}
-            onAction={() => void connectService(tool.name, labelFor(tool.name), new RegExp(tool.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"))}
-          />
-        ))}
       </div>
-      {guidance && (
-        <div className="conn-guide" role="status">
-          <p>Connect {guidance} inside Fo first, then come back. Pact will see it here.</p>
-          <div className="row-actions">
-            <button className="text-btn" type="button" onClick={() => void run("fo-open", async () => {
-              if (!(await openFo())) setNote("Fo didn't share a page to open. Connect it inside Fo, then refresh.");
-            })}>Open Fo</button>
-            <button className="text-btn" type="button" onClick={() => void run("refresh", async () => { await refreshStatus(); })}>Refresh status</button>
-          </div>
-        </div>
-      )}
+      <p className="conn-note">Connect your Fo account once. Pact can ask Fo to work with the Google and workspace services, phone, email and custom connectors you authorize there. Add or manage services inside Fo. Access depends on your Fo account and its permissions.</p>
+      <div className="row-actions"><button className="text-btn" type="button" disabled={!!busy} onClick={() => void run("refresh", refreshStatus)}>Refresh connection</button></div>
+      <div className="group-label">Live Fo tools</div>
+      <div className="group">{tools.length ? tools.map((tool) => <div className="set-row" key={tool.name}><span>{tool.name}</span><span className="conn-meta">Available</span></div>) : <p className="conn-note">No live tools available. Connect or refresh Fo.</p>}</div>
+      <p className="conn-note">Available tools do not confirm which services are connected or that an action has completed. Pact shows Fo’s returned status after a request.</p>
       {note && <p className="conn-note">{note}</p>}
       <div className="group-label">Data</div>
       <div className="group">

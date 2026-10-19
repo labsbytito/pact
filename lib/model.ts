@@ -25,6 +25,7 @@ export type Message = {
   at: string;
   /** User stopped generation; keep partial text. */
   stopped?: boolean;
+  attachments?: import("./attachments").Attachment[];
 };
 export type Action = {
   id: string;
@@ -56,7 +57,13 @@ export type Action = {
   at?: string;
   runId?: string;
 };
+export type PactCompanion = { name: string; appearance: CompanionAppearance };
 export type Pact = {
+  companion?: PactCompanion;
+  titleSource?: "auto" | "manual";
+  deletedAt?: string;
+  /** Retained locally only for a failed reply retry; cleared when the reply succeeds. */
+  pendingAttachments?: import("./attachments").Attachment[];
   id: string;
   characterSeed?: string;
   title: string;
@@ -110,11 +117,14 @@ export function makePact(
   intention: string,
   source?: Source,
   existing: readonly Pact[] = [],
+  companion?: PactCompanion,
 ): Pact {
   const at = now();
   const id = uid();
   return {
     id,
+    companion: companion ? structuredClone(companion) : undefined,
+    titleSource: "auto",
     characterSeed: newCharacterSeed(
       id,
       existing.map((p) => p.characterSeed ?? p.id),

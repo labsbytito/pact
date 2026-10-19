@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "WXT_PUBLIC_PACT_API=http://localhost:3000 wxt",
-    "build": "WXT_PUBLIC_PACT_API=http://localhost:3000 wxt build",
+    "build": "wxt build",
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "zip": "PACT_STORE_BUILD=1 wxt zip",

@@ -21,7 +21,9 @@ In another terminal:
 pnpm dev
 ```
 
-`pnpm dev` and `pnpm build` always talk to `http://localhost:3000`. The production URL is only the `WXT_PUBLIC_PACT_API` line in `.env.production`, and only `pnpm zip:release` reads it.
+`pnpm dev` talks to `http://localhost:3000`. Production builds read `WXT_PUBLIC_PACT_API` from `.env.production`. `pnpm build` and `pnpm zip:release` preserve that hosted origin.
+
+For a compiled judge candidate with an illustrated guide: run `node scripts/package-judges.mjs` after the production build. See `docs/FUNCTIONALITY-HANDOFF.md` for verification and release limits.
 
 Load `.output/chrome-mv3` from `chrome://extensions` with Developer mode on. Open an ordinary webpage and click the Pact icon.
 

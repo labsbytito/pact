@@ -27,8 +27,12 @@ const base =
     ?.WXT_PUBLIC_PACT_API || "http://localhost:3000";
 
 let installToken = "";
+let tokenFlight: Promise<void> | undefined;
+let tokenEpoch = 0;
 
 export async function clearInstallToken() {
+  tokenEpoch++;
+  tokenFlight = undefined;
   installToken = "";
   if (typeof chrome !== "undefined" && chrome.storage?.local)
     await chrome.storage.local.remove("pactInstallToken");
@@ -37,14 +41,24 @@ export async function clearInstallToken() {
 async function ensureToken(force = false) {
   if (force) await clearInstallToken();
   if (installToken || typeof chrome === "undefined" || !chrome.storage?.local) return;
-  const stored = await chrome.storage.local.get("pactInstallToken");
-  installToken = typeof stored.pactInstallToken === "string" ? stored.pactInstallToken : "";
-  if (installToken) return;
-  const issued = await fetch(base + "/api/install", { method: "POST" });
-  const body = (await issued.json().catch(() => ({}))) as { token?: string };
-  if (!issued.ok || !body.token) throw new Error("Pact couldn't connect. Try again.");
-  installToken = body.token;
-  await chrome.storage.local.set({ pactInstallToken: installToken });
+  if (tokenFlight) return tokenFlight;
+  const epoch = tokenEpoch;
+  const flight = (async () => {
+    const stored = await chrome.storage.local.get("pactInstallToken");
+    if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
+    if (typeof stored.pactInstallToken === "string" && stored.pactInstallToken) {
+      installToken = stored.pactInstallToken; return;
+    }
+    const issued = await fetch(base + "/api/install", { method: "POST" });
+    const body = (await issued.json().catch(() => ({}))) as { token?: string };
+    if (!issued.ok || !body.token) throw new Error("Pact couldn't connect. Try again.");
+    if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
+    await chrome.storage.local.set({ pactInstallToken: body.token });
+    if (epoch !== tokenEpoch) throw new Error("Pact account changed. Try again.");
+    installToken = body.token;
+  })();
+  tokenFlight = flight;
+  try { await flight; } finally { if (tokenFlight === flight) tokenFlight = undefined; }
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

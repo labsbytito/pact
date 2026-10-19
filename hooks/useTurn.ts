@@ -1,3 +1,5 @@
+import type { Attachment } from "../lib/attachments";
+import type { PactCompanion } from "../lib/model";
 import { useRef, useState } from "react";
 import { AbortInterpretError, ApiError, interpretLive, type TurnPrefs } from "../lib/api";
 import { approveRequest, cancelPlan, loadRunByPlan, pollRun } from "../lib/backend";
@@ -8,6 +10,9 @@ export type TurnPrefsLive = TurnPrefs & { signedOut?: boolean };
 
 export function useTurn(save: (pact: Pact) => void) {
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const companion = useRef<PactCompanion | undefined>(undefined);
+  const busySend = useRef(false);
   const [streaming, setStreaming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -16,9 +21,11 @@ export function useTurn(save: (pact: Pact) => void) {
   const pollRef = useRef(new Map<string, number>());
   const approving = useRef(false);
   const sought = useRef(new Set<string>());
+  const discarded = useRef(new Set<string>());
   const latest = useRef(new Map<string, Pact>());
   const prefs = useRef<TurnPrefsLive>({});
   function remember(next: Pact) {
+    if (discarded.current.has(next.id)) return next;
     latest.current.set(next.id, next);
     save(next);
     return next;
@@ -47,8 +54,10 @@ export function useTurn(save: (pact: Pact) => void) {
   function watch(pact: Pact, runId: string) {
     stopPoll(runId);
     const tick = async () => {
+      if (discarded.current.has(pact.id)) return;
       try {
         const run = await pollRun(runId);
+        if (discarded.current.has(pact.id)) return;
         const base = latest.current.get(pact.id) ?? pact;
         const previous = ownedAction(base, runId);
         if (!previous) return;
@@ -125,20 +134,27 @@ export function useTurn(save: (pact: Pact) => void) {
     reuseFailed = false,
   ) {
     const trimmed = text.trim();
-    if (!trimmed || streaming) return current;
+    if ((!trimmed && !attachments.length) || busySend.current) return current;
+    busySend.current = true;
+    const files = reuseFailed ? current?.pendingAttachments ?? [] : attachments;
+    const requestText = trimmed || "Please read the attached files.";
     setNote("");
     setReplyError("");
     if (!reuseFailed) setDraft("");
-    const created = !current;
+    const created = !current || current.messages.length === 0;
     const tail = current?.messages.at(-1);
     const reuse = Boolean(reuseFailed && current && tail?.role === "assistant" && !tail.text.trim());
     const assistant = reuse ? { ...tail!, text: "", stopped: false } : message("assistant", "");
     const base = reuse
-      ? { ...current!, messages: current!.messages.map((item) => item.id === assistant.id ? assistant : item), updatedAt: now(), source: current!.source ?? source }
+      ? { ...current!, messages: current!.messages.map((item) => item.id === assistant.id ? assistant : item), updatedAt: now(), source: source ?? current!.source }
       : current
-        ? { ...current, messages: [...current.messages, message("user", trimmed)], updatedAt: now(), source: current.source ?? source }
-        : makePact(trimmed, source);
-    let pact = reuse ? remember(base) : remember({ ...base, messages: [...base.messages, assistant] });
+        ? { ...current, messages: [...current.messages, message("user", requestText)], updatedAt: now(), source: source ?? current.source }
+        : makePact(requestText, source, [], companion.current);
+    base.messages = [...base.messages];
+    const lastUser = base.messages.findLastIndex((m) => m.role === "user");
+    if (lastUser >= 0 && files.length) base.messages[lastUser] = { ...base.messages[lastUser]!, attachments: files };
+    let pact = remember({ ...base, pendingAttachments: files, messages: reuse ? base.messages : [...base.messages, assistant] });
+    if (!reuseFailed) setAttachments([]);
     onReady?.(pact);
     setStreaming(true);
     const abort = new AbortController();
@@ -146,7 +162,7 @@ export function useTurn(save: (pact: Pact) => void) {
     try {
       const result = await interpretLive(
         { ...pact, messages: pact.messages.filter((item) => item.text.trim()) },
-        [],
+        files,
         {
           signal: abort.signal,
           prefs: { responseStyle: prefs.current.responseStyle, askBefore: prefs.current.askBefore },
@@ -160,6 +176,7 @@ export function useTurn(save: (pact: Pact) => void) {
           },
         },
       );
+      if (discarded.current.has(pact.id)) return null;
       assistant.text = result.reply || assistant.text;
       const live = latest.current.get(pact.id) ?? pact;
       const action: Action | undefined = result.action
@@ -184,7 +201,8 @@ export function useTurn(save: (pact: Pact) => void) {
       const history = live.actions ?? [];
       pact = remember({
         ...live,
-        title: created && result.title ? result.title : live.title,
+        title: created && live.titleSource !== "manual" && result.title ? result.title : live.title,
+        pendingAttachments: undefined,
         messages: live.messages.map((item) => item.id === assistant.id ? { ...assistant } : item),
         action: action ?? (prior?.status === "proposed" ? { ...prior, status: "superseded" } : prior),
         actions: keepRunning && action ? [...history.filter((item) => item.id !== keepRunning.id), keepRunning] : history,
@@ -208,6 +226,7 @@ export function useTurn(save: (pact: Pact) => void) {
       return latest.current.get(pact.id) ?? pact;
     } finally {
       setStreaming(false);
+      busySend.current = false;
     }
   }
 
@@ -233,6 +252,7 @@ export function useTurn(save: (pact: Pact) => void) {
         pactId: current.id,
         contextHash: action.contextHash,
         requestId,
+        confirmConsequential: action.consequential === true,
       });
       const live = latest.current.get(current.id) ?? current;
       const next = remember({
@@ -272,5 +292,12 @@ export function useTurn(save: (pact: Pact) => void) {
 
   function stop() { abortRef.current?.abort(); }
 
-  return { draft, setDraft, streaming, busy, note, setNote, replyError, send, approve, cancel, stop, watch, recover, prefs };
+  function reset() {
+    abortRef.current?.abort(); stopPoll();
+    for (const id of latest.current.keys()) discarded.current.add(id);
+    latest.current.clear(); sought.current.clear();
+    setAttachments([]); setDraft("");
+  }
+
+  return { reset, attachments, setAttachments, companion, draft, setDraft, streaming, busy, note, setNote, replyError, send, approve, cancel, stop, watch, recover, prefs };
 }

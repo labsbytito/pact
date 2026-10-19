@@ -30,6 +30,7 @@ export const approveRequest = (body: {
   pactId?: string;
   contextHash?: string;
   requestId: string;
+  confirmConsequential?: boolean;
 }) => api<RunBody>("/api/actions/approve", body);
 
 export const pollRun = (id: string) => api<RunBody>(`/api/actions/${id}`);

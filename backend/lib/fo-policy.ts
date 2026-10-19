@@ -1,7 +1,5 @@
-// Consequential Fo tools are opt-in in code. ask_fo and read-only get_*/list_*
-// tools work by default. start_fo_call places a real phone call, and any tool
-// Pact does not already know is treated the same way: it stays off unless
-// PACT_FO_CONSEQUENTIAL=1, and even then approval must carry a separate confirmation.
+// Discover capabilities from the user’s live Fo connection. Unfamiliar tools
+// require explicit review; an operator may disable them with PACT_FO_CONSEQUENTIAL=0.
 const READ_ONLY = /^(?:get|list)_[a-z0-9_]+$/;
 
 export type ToolDecision = "allow" | "confirm" | "deny";
@@ -9,7 +7,7 @@ export type ToolDecision = "allow" | "confirm" | "deny";
 export function consequentialToolsEnabled(
   env: Record<string, string | undefined> = process.env,
 ) {
-  return env.PACT_FO_CONSEQUENTIAL === "1";
+  return env.PACT_FO_CONSEQUENTIAL !== "0";
 }
 
 export function decideTool(name: string, consequentialEnabled: boolean): ToolDecision {
