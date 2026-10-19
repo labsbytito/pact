@@ -328,7 +328,15 @@ a {
   height: 43px;
   flex-shrink: 0;
 }
-.recent > span:nth-child(2) {
+.recent-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.recent-open > span:nth-child(2) {
   min-width: 0;
   flex: 1;
 }
@@ -1228,8 +1236,78 @@ a {
 .run-label {
   color: var(--accent);
 }
-.pact-tile > svg {
+.tile-open {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.tile-open > svg {
   color: #c0c1c6;
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.section-heading h2 {
+  margin: 14px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.conversation-options {
+  flex-shrink: 0;
+}
+.manage-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dialog input {
+  width: 100%;
+  min-height: 40px;
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+}
+.file-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-inset);
+}
+.file-list span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-list small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.pending-files {
+  margin: 0 0 8px;
 }
 .library-empty {
   text-align: center;

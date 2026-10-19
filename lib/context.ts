@@ -1,4 +1,12 @@
-import type { Pact, Source, Action } from "./model";
+import type { Message, Pact, Source, Action } from "./model";
+function messageForModel(message: Message) {
+  const notes = (message.attachments ?? []).map((file) =>
+    file.text
+      ? `${file.name} (${file.mediaType}, ${file.size} bytes)${file.truncated ? ", excerpt" : ""}:\n${file.text}`
+      : `${file.name} (${file.mediaType}, ${file.size} bytes) is attached. Its contents were not included.`,
+  );
+  return notes.length ? `${message.text}\n\n${notes.join("\n\n")}` : message.text;
+}
 // Keep the complete local history; only send the context needed for this reply.
 export function interpretationContext(pact: Pact) {
   let source: Source | undefined;
@@ -42,9 +50,10 @@ export function interpretationContext(pact: Pact) {
       id: pact.id,
       intention: pact.intention.slice(0, 8000),
       source,
-      messages: pact.messages
-        .slice(-24)
-        .map((m) => ({ role: m.role, text: m.text.slice(0, 8000) })),
+      messages: pact.messages.slice(-24).map((m) => ({
+        role: m.role,
+        text: messageForModel(m).slice(0, 8000),
+      })),
     },
   };
   const bytes = () => new TextEncoder().encode(JSON.stringify(payload)).length;
@@ -114,7 +123,7 @@ export function mergeReply(
 ): Pact {
   let next = {
     ...pact,
-    title: result.title ?? pact.title,
+    title: pact.titleEdited ? pact.title : (result.title ?? pact.title),
     messages: [
       ...pact.messages,
       { id, at, role: "assistant" as const, text: result.reply },
