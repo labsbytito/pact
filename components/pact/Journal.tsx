@@ -1,33 +1,13 @@
-import { useState } from "react";
+import type { CompanionAppearance } from "../../lib/character";
 import type { Action } from "../../lib/model";
-import { ChevronIcon } from "../icons";
+import { PactBlob } from "../companion/PactBlob";
 
-const labels: Record<string, string> = {
-  proposed: "Proposed",
-  approved: "Approved",
-  running: "Asking Fo",
-  returned: "Returned",
-  needs_answer: "Question",
-  failed: "Failed",
-  unknown: "Unknown",
-  superseded: "Cancelled",
-};
-
-export function Journal({ actions }: { actions: Action[] }) {
-  const [open, setOpen] = useState(false);
-  if (!actions.length) return null;
+export function Activity({ action, appearance }: { action: Action; appearance?: CompanionAppearance }) {
+  const lead = action.status === "failed" ? "Couldn't ask Fo" : "Asked Fo";
   return (
-    <div className="journal">
-      <button className="journal-row" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <ChevronIcon open={open} />
-        <span>Runs ({actions.length})</span>
-      </button>
-      {open && actions.map((action) => (
-        <div key={action.id} className="journal-row">
-          <span className="journal-title">{action.title}</span>
-          <span className="journal-status">{labels[action.status] ?? action.status}</span>
-        </div>
-      ))}
+    <div className="activity">
+      <span className="activity-ico"><PactBlob size={16} state="still" appearance={appearance} /></span>
+      <span>{lead} · {action.title}</span>
     </div>
   );
 }

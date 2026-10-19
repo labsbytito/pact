@@ -1,4 +1,4 @@
-/** Session greeting. Eyes do not follow the pointer. */
+/** Session greeting. The large blob may ease its eyes by a couple of pixels. */
 
 export type BlobState =
   | "idle"

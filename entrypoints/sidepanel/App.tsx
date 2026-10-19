@@ -1,14 +1,10 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Composer } from "../../components/chat/Composer";
 import { EmptyState } from "../../components/chat/EmptyState";
-import { Message } from "../../components/chat/Message";
-import { StatusLine } from "../../components/chat/StatusLine";
-import { Thread } from "../../components/chat/Thread";
+import { LivePill } from "../../components/chat/LivePill";
+import { Transcript } from "../../components/chat/Transcript";
 import { PactList } from "../../components/library/PactList";
-import { Journal } from "../../components/pact/Journal";
 import { PactHeader } from "../../components/pact/PactHeader";
-import { ProposedRequest } from "../../components/pact/ProposedRequest";
-import { ResultCard } from "../../components/pact/ResultCard";
 import { SourceChip } from "../../components/pact/SourceChip";
 import { SettingsSheet } from "../../components/settings/SettingsSheet";
 import { ServerState } from "../../components/system/ServerState";
@@ -24,8 +20,8 @@ import type { Pact, Source } from "../../lib/model";
 import type { BlobState } from "../../lib/pact-blob";
 import { shouldGreet } from "../../lib/pact-blob";
 import { currentPageLabel } from "../../lib/page-label";
-import { askChips, hostOf, pageTitle, siteLine, type PageLabel } from "../../lib/suggestions";
-import { companionThinking, pactStep } from "../../lib/step";
+import { askChips, hostOf, pageTitle, type PageLabel } from "../../lib/suggestions";
+import { companionThinking, liveLine } from "../../lib/step";
 
 export default function App() {
   const { pacts, activeId, setActiveId, settings, savePact, updateSettings, clearPacts } = useVault();
@@ -33,11 +29,11 @@ export default function App() {
   const turn = useTurn(savePact);
   const [source, setSource] = useState<Source | undefined>();
   const [view, setView] = useState<"home" | "list" | "settings">("home");
-  const [glass, setGlass] = useState(false);
   const [wide, setWide] = useState(false);
   const [blob, setBlob] = useState<BlobState>("idle");
   const [reading, setReading] = useState(false);
   const [page, setPage] = useState<PageLabel>();
+  const hopped = useRef<string | null>(null);
   const active = pacts.find((item) => item.id === activeId) ?? null;
   const ready = link.kind === "ok" || link.kind === "fo";
   const health = ready ? link.health : undefined;
@@ -65,11 +61,19 @@ export default function App() {
     const timer = window.setTimeout(() => setBlob("idle"), 700);
     return () => window.clearTimeout(timer);
   }, [blob]);
+  useEffect(() => {
+    const action = active?.action;
+    if (!action || action.status !== "returned" || hopped.current === action.id) return;
+    hopped.current = action.id;
+    setBlob("happy");
+    const timer = window.setTimeout(() => setBlob((current) => (current === "happy" ? "idle" : current)), 900);
+    return () => window.clearTimeout(timer);
+  }, [active?.action?.id, active?.action?.status]);
   const status = active?.action?.status;
-  const step = pactStep({ reading, streaming: turn.streaming, status });
   const thinking = companionThinking({ reading, streaming: turn.streaming, status });
-  const state: BlobState = link.kind === "offline" ? "sleepy" : thinking ? "thinking" : blob;
-  const caption = pageTitle(page) || active?.source?.title || "";
+  const typing = Boolean(turn.draft.trim()) && !turn.streaming && !reading;
+  const state: BlobState = link.kind === "offline" ? "sleepy" : thinking ? "thinking" : typing ? "listening" : blob;
+  const line = liveLine({ reading, streaming: turn.streaming, status, hasPage: Boolean(pageTitle(page) || source) });
   async function connect() {
     try {
       const result = await connectFo();
@@ -103,19 +107,17 @@ export default function App() {
   function send() {
     void turn.send(active, source ?? active?.source, turn.draft, (created) => setActiveId(created.id));
   }
-  const showComposer = view !== "settings" && ready && view !== "list";
+  const showComposer = view === "home" && ready;
+  const title = view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact";
   return (
-    <div className="app">
-      <div className="scroll" onScroll={(event) => setGlass(event.currentTarget.scrollTop > 4)}>
+    <div className={showComposer ? "app with-composer" : "app"}>
+      <div className="scroll">
         <PactHeader
-          title={view === "settings" ? "Settings" : view === "list" ? "Pacts" : active?.title || "Pact"}
-          caption={view === "home" ? caption : ""}
-          live={view !== "home" || Boolean(active)}
+          title={title}
+          live={link.kind !== "offline"}
           state={state}
           appearance={settings.companion}
-          demo={!!health?.demo}
-          glass={glass}
-          onBack={view === "list" ? () => setView("home") : undefined}
+          onBack={view === "home" ? undefined : () => setView("home")}
           onList={view === "home" ? () => setView("list") : undefined}
           onSettings={() => setView(view === "settings" ? "home" : "settings")}
         />
@@ -125,63 +127,24 @@ export default function App() {
           ) : !ready && view !== "settings" ? (
             <ServerState kind={link.kind === "unconfigured" ? "unconfigured" : link.kind === "limited" ? "limited" : "offline"} model={link.kind === "unconfigured" ? link.model : undefined} dev={import.meta.env.DEV} appearance={settings.companion} onRetry={() => void refresh()} onConnect={() => void connect()} />
           ) : view === "settings" ? (
-            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} onRefresh={() => void refresh()} onDeleted={() => void deleted()} />
+            <SettingsSheet settings={settings} onChange={updateSettings} onClose={() => setView("home")} fo={health?.fo} wide={wide} demo={!!health?.demo} onRefresh={() => void refresh()} onDeleted={() => void deleted()} />
           ) : view === "list" ? (
             <PactList pacts={pacts.filter((item) => !item.archived)} onOpen={(id) => { setActiveId(id); setView("home"); }} />
           ) : !active ? (
-            <EmptyState appearance={settings.companion} site={siteLine(page)} chips={askChips(page)} onRead={() => void readPage()} onAsk={turn.setDraft} />
+            <EmptyState appearance={settings.companion} state={state} title={pageTitle(page)} chips={askChips(page)} foConnected={health?.fo === "signed in"} pageConnected={Boolean(pageTitle(page) || source)} pageMark={page?.host?.slice(0, 1).toUpperCase()} onConnect={() => void connect()} onRead={() => void readPage()} onAsk={turn.setDraft} />
           ) : (
-            <Home active={active} streaming={turn.streaming} step={step} busy={turn.busy} signedOut={link.kind === "fo"} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact).then((next) => next && setActiveId(next.id))} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active?.source ?? source, text)} />
+            <Transcript active={active} busy={turn.busy || turn.streaming} signedOut={link.kind === "fo"} appearance={settings.companion} onConnect={() => void connect()} onApprove={(pact) => void turn.approve(pact).then((next) => next && setActiveId(next.id))} onCancel={(pact) => void turn.cancel(pact)} onRetry={(text) => void turn.send(active, active.source ?? source, text)} onEdit={turn.setDraft} />
           )}
           {turn.note && <p className="note">{turn.note}</p>}
         </div>
-        {showComposer && (
-          <div className="dock">
-            {(active?.source ?? source) && <SourceChip source={(active?.source ?? source)!} />}
-            <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} />
-          </div>
-        )}
       </div>
+      {showComposer && (
+        <div className="dock">
+          {(active?.source ?? source) && <SourceChip source={(active?.source ?? source)!} />}
+          <LivePill text={line} state={state} appearance={settings.companion} demo={!!health?.demo} />
+          <Composer value={turn.draft} onChange={turn.setDraft} onSend={send} onStop={turn.stop} streaming={turn.streaming} onRead={() => void readPage()} onDictate={() => void voice.dictate()} />
+        </div>
+      )}
     </div>
-  );
-}
-
-function Home({ active, streaming, step, busy, signedOut, onConnect, onApprove, onCancel, onRetry }: {
-  active: Pact;
-  streaming: boolean;
-  step: string;
-  busy: boolean;
-  signedOut: boolean;
-  onConnect: () => void;
-  onApprove: (pact: Pact) => void;
-  onCancel: (pact: Pact) => void;
-  onRetry: (text: string) => void;
-}) {
-  const action = active.action;
-  const runs = (active.actions ?? []).filter((item) => item.status === "returned" && item.result);
-  let shown = 0;
-  const lastUser = [...active.messages].reverse().find((item) => item.role === "user")?.text;
-  return (
-    <>
-      <Thread>
-        {active.messages.map((item, index) => {
-          const next = active.messages[index + 1];
-          const result = item.role === "assistant" && (!next || next.role === "user") ? runs[shown] : undefined;
-          if (result) shown += 1;
-          return (
-            <Fragment key={item.id}>
-              {item.text && <Message role={item.role} text={item.text} at={item.at} stopped={item.stopped} onRetry={item.stopped && lastUser ? () => onRetry(lastUser) : undefined} />}
-              {result?.result && <ResultCard text={result.result} />}
-            </Fragment>
-          );
-        })}
-      </Thread>
-      {step && <StatusLine text={step} />}
-      {streaming && !step && <StatusLine text="Writing a reply…" />}
-      {action?.status === "needs_answer" && action.result && <p className="meta">{action.result}</p>}
-      {action?.status === "needs_answer" && <p className="meta">Reply below and Fo will continue this conversation.</p>}
-      {action?.status === "proposed" && <ProposedRequest action={action} busy={busy || streaming} signedOut={signedOut} onApprove={() => onApprove(active)} onCancel={() => onCancel(active)} onConnect={onConnect} />}
-      <Journal actions={active.actions ?? []} />
-    </>
   );
 }

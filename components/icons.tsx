@@ -25,6 +25,15 @@ export function ListIcon({ size = 16 }: IconProps) {
 export function CloseIcon({ size = 16 }: IconProps) {
   return svg("M18 6 6 18M6 6l12 12", size);
 }
+export function CopyIcon({ size = 14 }: IconProps) {
+  return svg("M8 8h11v11H8zM5 16V5h11", size);
+}
+export function RetryIcon({ size = 14 }: IconProps) {
+  return svg("M3 12a9 9 0 1 0 3-6.7M3 4v5h5", size);
+}
+export function PencilIcon({ size = 14 }: IconProps) {
+  return svg("M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z", size);
+}
 export function ChevronIcon({ size = 12, open = false }: IconProps & { open?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: open ? "rotate(90deg)" : undefined }}>

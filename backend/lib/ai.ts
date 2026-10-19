@@ -117,7 +117,7 @@ export function classifyAiFailure(text: string, httpStatus?: number) {
     );
   if (httpStatus === 401 || /invalid api key|\/login|not logged in|authentication|unauthorized/.test(t))
     return new AiError(
-      "Claude isn’t signed in or the key was rejected. Sign in to Claude Code or fix ANTHROPIC_API_KEY, then retry. Your Pact is saved.",
+      "Claude isn’t signed in, so Pact can’t reply yet. Your Pact is saved.",
       503,
     );
   if (httpStatus === 403 || /permission|forbidden/.test(t))
@@ -132,12 +132,12 @@ export function classifyAiFailure(text: string, httpStatus?: number) {
     );
   if (httpStatus === 404 || /model.*(not found|unavailable|does not exist|issue with the selected model)/.test(t))
     return new AiError(
-      "The configured Claude model isn’t available. Set ANTHROPIC_MODEL or PACT_CLAUDE_MODEL to a model this account can use. Your Pact is saved.",
+      "That Claude model isn’t available right now. Your Pact is saved.",
       503,
     );
   if (/max.?budget|budget/.test(t))
     return new AiError(
-      "That reply would exceed the per-request prototype budget. Try a shorter message or raise PACT_AI_REQUEST_CAP. Your Pact is saved.",
+      "That reply is longer than Pact can send right now. Try a shorter message. Your Pact is saved.",
       402,
     );
   if (httpStatus === 529 || (httpStatus && httpStatus >= 500) || /overloaded/.test(t))
@@ -146,7 +146,7 @@ export function classifyAiFailure(text: string, httpStatus?: number) {
       503,
     );
   return new AiError(
-    "Claude could not return a reply. Check the local companion setup and try again. Your Pact is saved.",
+    "Pact didn't get a reply. Try again. Your Pact is saved.",
     502,
   );
 }

@@ -1,38 +1,37 @@
-import { useState } from "react";
+import { PactBlob } from "../companion/PactBlob";
+import type { CompanionAppearance } from "../../lib/character";
+import { CopyIcon, PencilIcon, RetryIcon } from "../icons";
 import { Markdown } from "./Markdown";
 
 export function Message({
   role,
   text,
-  at,
-  stopped,
+  avatar,
+  appearance,
   onRetry,
+  onEdit,
 }: {
   role: "user" | "assistant";
   text: string;
-  at?: string;
-  stopped?: boolean;
+  avatar?: boolean;
+  appearance?: CompanionAppearance;
   onRetry?: () => void;
+  onEdit?: (text: string) => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  const time = at ? new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
   return (
-    <div className={`bubble ${role}`} tabIndex={0}>
-      {role === "assistant" ? <Markdown text={text} /> : text}
-      <div className="bubble-meta">
-        {time && <span>{time}</span>}
-        <button
-          type="button"
-          className={copied ? "tick" : undefined}
-          onClick={() => {
-            void navigator.clipboard?.writeText(text);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 900);
-          }}
-        >
-          {copied ? "Copied" : "Copy"}
+    <div className={`msg ${role}`} tabIndex={0}>
+      {avatar && <PactBlob size={24} state="still" appearance={appearance} />}
+      <div className={`bubble ${role}`}>{role === "assistant" ? <Markdown text={text} /> : text}</div>
+      <div className="msg-actions">
+        <button type="button" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(text)}>
+          <CopyIcon />
         </button>
-        {stopped && onRetry && <button type="button" onClick={onRetry}>Retry</button>}
+        {role === "assistant" && onRetry && (
+          <button type="button" aria-label="Retry" onClick={onRetry}><RetryIcon /></button>
+        )}
+        {role === "user" && onEdit && (
+          <button type="button" aria-label="Edit" onClick={() => onEdit(text)}><PencilIcon /></button>
+        )}
       </div>
     </div>
   );

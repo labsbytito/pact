@@ -13,6 +13,21 @@ export function pactStep(input: {
   return "";
 }
 
+/** The one status line, shown in the pill above the composer. */
+export function liveLine(input: {
+  reading?: boolean;
+  streaming?: boolean;
+  status?: string;
+  hasPage?: boolean;
+}): string {
+  const step = pactStep(input);
+  if (step) return step;
+  if (input.status === "returned") return "Fo replied";
+  if (input.status === "failed") return "Fo couldn't finish that";
+  if (input.status === "cancelled" || input.status === "superseded") return "That step was cancelled";
+  return input.hasPage ? "Here with this page" : "Here when you are";
+}
+
 export function companionThinking(input: {
   reading?: boolean;
   streaming?: boolean;

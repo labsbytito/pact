@@ -18,10 +18,9 @@ export function ProposedRequest({
 }) {
   const message = typeof action.arguments?.message === "string" ? action.arguments.message : action.instruction;
   return (
-    <section className="card request" aria-label="Request to Fo">
+    <section className="card request" aria-label={`Request to Fo. ${action.toolName || "ask_fo"}`}>
       <h3>Request to Fo</h3>
-      <p className="tool">{action.toolName || "ask_fo"}</p>
-      <pre className="mono">{message}</pre>
+      <pre className="mono" title={action.toolName || "ask_fo"}>{message}</pre>
       {signedOut && onConnect && (
         <button className="primary-btn" type="button" onClick={onConnect}>Connect Fo</button>
       )}

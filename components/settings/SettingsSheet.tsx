@@ -25,6 +25,7 @@ export function SettingsSheet({
   wide,
   onRefresh,
   onDeleted,
+  demo,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -33,6 +34,7 @@ export function SettingsSheet({
   wide: boolean;
   onRefresh?: () => void;
   onDeleted?: () => void;
+  demo?: boolean;
 }) {
   const [page, setPage] = useState<Page | null>(wide ? "General" : null);
   useEffect(() => { if (wide && !page) setPage("General"); }, [wide, page]);
@@ -77,7 +79,7 @@ export function SettingsSheet({
             {page === "General" && <General settings={settings} onChange={onChange} />}
             {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} />}
             {page === "Companion" && <Companion companion={companion} onChange={onChange} />}
-            {page === "About" && <About />}
+            {page === "About" && <About demo={demo} />}
           </>
         )}
       </div>
@@ -141,7 +143,7 @@ function Companion({ companion, onChange }: { companion: CompanionAppearance; on
       <div className="shapes">
         {SHAPE_OPTIONS.map((option) => (
           <button key={option.shape} className="shape-btn" type="button" aria-pressed={companion.shape === option.shape} aria-label={option.name} title={option.name} onClick={() => onChange({ companion: { ...companion, shape: option.shape } })}>
-            <PactBlob size={28} state="still" appearance={{ shape: option.shape, color: companion.color }} />
+            <PactBlob size={24} state="still" appearance={{ shape: option.shape, color: companion.color }} />
           </button>
         ))}
       </div>
@@ -189,10 +191,11 @@ function Microphone({ settings, onChange }: { settings: Settings; onChange: (pat
   );
 }
 
-function About() {
+function About({ demo }: { demo?: boolean }) {
   return (
     <div className="group">
       <div className="set-row"><span>Pact reads the page you choose, suggests one step, and only sends it to Fo when you approve.</span></div>
+      {demo && <div className="set-row"><span>Demo mode is on. Approve runs a local mock, and nothing is sent to Fo.</span></div>}
     </div>
   );
 }

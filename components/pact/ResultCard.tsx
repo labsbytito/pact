@@ -1,12 +1,14 @@
 import { Markdown } from "../chat/Markdown";
 
 export function ResultCard({ text }: { text: string }) {
-  const body = text.replace(/^Fo replied with\s+/i, "");
+  const body = text
+    .replace(/^Fo replied with\s+/i, "")
+    .replace(/\s*This is a demo result, not a live Fo reply\.?/i, "")
+    .trim();
   const sentence = body.charAt(0).toUpperCase() + body.slice(1);
   return (
-    <section className="card" aria-label="Fo replied">
-      <p className="result-label">Fo replied</p>
-      <Markdown text={sentence} />
-    </section>
+    <div className="msg assistant">
+      <div className="bubble assistant"><Markdown text={sentence} /></div>
+    </div>
   );
 }

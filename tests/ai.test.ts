@@ -38,13 +38,13 @@ test("aiStatus exposes provider, model and budget but never keys", () => {
 test("provider failures become specific actionable messages with sensible status", () => {
   const cases: [string, number | undefined, RegExp, number][] = [
     ["Your credit balance is too low", 400, /no available credit/, 402],
-    ["invalid x-api-key authentication_error", 401, /key was rejected/, 503],
+    ["invalid x-api-key authentication_error", 401, /signed in/, 503],
     ["Invalid API key · Please run /login", undefined, /signed in/, 503],
     ["rate_limit_error", 429, /usage limit/, 429],
     ["Claude AI usage limit reached", undefined, /usage limit/, 429],
     ["model: claude-x not_found_error", 404, /model isn’t available/, 503],
     ["overloaded_error", 529, /overloaded/, 503],
-    ["something odd", 400, /could not return a reply/, 502],
+    ["something odd", 400, /didn't get a reply/, 502],
   ];
   for (const [text, status, pattern, code] of cases) {
     const e = classifyAiFailure(text, status);
@@ -60,7 +60,7 @@ test("CLI results: success, budget, error, timeout and garbage are distinguished
   assert.equal(readCliResult(ok, "", false), "hi");
   assert.throws(
     () => readCliResult(JSON.stringify({ subtype: "error_max_budget_usd" }), "", false),
-    /per-request prototype budget/,
+    /shorter message/,
   );
   assert.throws(
     () =>

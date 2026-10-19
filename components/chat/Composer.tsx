@@ -23,23 +23,25 @@ export function Composer({
     const el = box.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(el.scrollHeight, 126)}px`;
+    const next = Math.min(el.scrollHeight, 126);
+    el.style.height = `${next}px`;
+    el.form?.toggleAttribute("data-multiline", next > 36);
   }, [value]);
   return (
     <div className="composer-wrap">
       {menu && (
-        <div className="menu" role="menu">
+        <div className="menu glass" role="menu">
           <button type="button" role="menuitem" onClick={() => { setMenu(false); onRead(); }}>Read this page</button>
         </div>
       )}
       <form
-        className="composer"
+        className="composer glass"
         onSubmit={(event) => {
           event.preventDefault();
           if (!streaming) onSend();
         }}
       >
-        <button className="icon-btn" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>+</button>
+        <button className="icon-btn composer-tool plus" type="button" aria-label="Add page or file" onClick={() => setMenu((open) => !open)}>+</button>
         <textarea
           ref={box}
           rows={1}
@@ -54,7 +56,7 @@ export function Composer({
             }
           }}
         />
-        <button className="icon-btn" type="button" aria-label="Dictate" onClick={onDictate}>
+        <button className="icon-btn composer-tool mic" type="button" aria-label="Dictate" onClick={onDictate}>
           <MicIcon />
         </button>
         {streaming ? (
