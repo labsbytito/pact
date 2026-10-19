@@ -164,15 +164,15 @@ export function PactList({
       <div className="library-tools">
         <label className="library-search">
           <Search size={14} aria-hidden="true" />
-          <input type="search" value={query} placeholder="Search Pacts" aria-label="Search Pacts" onChange={(event) => setQuery(event.target.value)} />
+          <input type="search" value={query} placeholder="Search chats" aria-label="Search chats" onChange={(event) => setQuery(event.target.value)} />
         </label>
         <button type="button" className="library-new" onClick={onNew}><Plus size={14} aria-hidden="true" />New</button>
       </div>
-      <div className="library-tabs" role="tablist" aria-label="Pact lists">
+      <div className="library-tabs" role="tablist" aria-label="Chat lists">
         <button type="button" role="tab" aria-selected={!archived} onClick={() => setArchived(false)}>Active</button>
         <button type="button" role="tab" aria-selected={archived} onClick={() => setArchived(true)}>Archived{archivedCount ? ` · ${archivedCount}` : ""}</button>
       </div>
-      {!shown.length && <p className="section-label">{needle ? "No Pacts match that search." : archived ? "Nothing archived." : "No Pacts yet. Start one with New."}</p>}
+      {!shown.length && <p className="section-label">{needle ? "No chats match that search." : archived ? "Nothing archived." : "No chats yet. Start one with New."}</p>}
       {pinned.length > 0 && <p className="section-label">Pinned</p>}
       {pinned.map(row)}
       {pinned.length > 0 && rest.length > 0 && <p className="section-label">Recent</p>}

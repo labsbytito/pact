@@ -103,7 +103,7 @@ async function loadRelease() {
     document.querySelector('#pending-guide').hidden = true;
     document.querySelector('#release-label').textContent = `PACT ${release.version} · VERIFIED PACKAGE`;
     document.querySelector('#release-note').textContent = 'Download the ZIP, then follow the three steps to get started in Chrome.';
-    document.querySelector('#release-meta').textContent = `SHA-256: ${release.sha256}`;
+    
   } catch { /* The initial pending state remains accurate on network/schema errors. */ }
 }
 void loadRelease();

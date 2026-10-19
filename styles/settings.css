@@ -254,3 +254,5 @@
 .run-steps li[data-state="done"]::before { content: "✓ "; }
 .run-steps li[data-state="now"] { color: var(--text-1); font-weight: 500; }
 .run-steps li[data-state="next"] { opacity: 0.55; }
+
+@media (max-width: 460px) { .set-row:has(.set-desc) { flex-wrap: wrap; } .set-row:has(.set-desc) > :first-child { flex: 1 1 100%; } .set-row:has(.set-desc) > .menu-trigger, .set-row:has(.set-desc) > :last-child { margin-left: 0; } }

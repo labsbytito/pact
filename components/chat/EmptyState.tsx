@@ -57,7 +57,7 @@ export function EmptyState({
         <div className="tool-row" aria-label="Give Pact context">
           {tiles.map((tile) => (
             <button key={tile.id} className="tool-tile" type="button" onClick={() => { if (tile.id === "page") onRead?.(); else if (!tile.connected) onOpenConnections(); }}>
-              <span className="tile-face">{tile.face}<i className={tile.connected ? "dot on" : "dot"} /></span>
+              <span className="tile-face">{tile.face}</span>
               <span className="tile-label">{tile.label}</span>
               <span className="tile-hint">{tile.hint}</span>
             </button>

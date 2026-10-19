@@ -106,7 +106,7 @@ export function Connections({
             <h4>{group}</h4>
             {items.map((item) => <div className="tool-item" key={item.name}>{item.name}<span className="set-desc">{item.can}</span></div>)}
           </div>
-        )) : <p className="conn-note">{loadError ? "Couldn't reach Fo to list its tools. Check your connection and try Refresh." : !signedIn ? "No tools yet. Connect Fo to see what it offers." : loaded ? "Fo didn't report any tools. Try Refresh." : "Checking with Fo…"}</p>}
+        )) : <p className="conn-note">{loadError ? "Couldn't reach Fo to list its tools. Check your connection and try Refresh." : !signedIn ? "Connect Fo above to unlock actions like email, calendar and messages." : loaded ? "Fo didn't report any tools. Try Refresh." : "Checking with Fo…"}</p>}
       </div>
       <p className="conn-note">This list comes live from Fo. It doesn't show which of your services are linked, and nothing runs until you approve a request.</p>
       <div className="group-label">Data</div>

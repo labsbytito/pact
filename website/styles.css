@@ -143,3 +143,8 @@ html{scroll-behavior:auto;scroll-padding-top:112px}
 .product-composer .mic{margin-left:auto;color:#555}.product-composer>span:last-child{margin-left:0!important}
 .hero-copy>.hero-caption{font-size:11px;letter-spacing:.02em;margin:10px 0 0;color:#ffffffd9;opacity:1}
 .hero-copy>.hero-caption{color:#2b2540!important;font-weight:500;text-shadow:0 1px 10px #ffffff80}
+
+.hero-copy .button.ghost-light{background:#ffffff55;border-color:#ffffffb0;color:#1a1a1a;margin-left:10px;backdrop-filter:blur(8px)}
+.hero-copy .button.ghost-light:hover{background:#ffffff80}
+.hero-demo{display:none}
+.section-meta span:empty{display:none}

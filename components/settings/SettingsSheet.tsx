@@ -74,7 +74,7 @@ export function SettingsSheet({
         <h2>{page}</h2>
         {page === "General" && <General settings={settings} onChange={onChange} />}
         {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} />}
-        {page === "Companion" && <><p className="conn-note">This sets the default look for new Pacts only. To change an existing chat's look, open the history menu "…" on that chat and choose Change look.</p><Companion companion={companion} onChange={onChange} /><div className="row-actions" style={{ marginTop: 16 }}><button className="ghost-btn" type="button" onClick={() => onChange({ companion: emptySettings.companion })}>Reset to defaults</button></div></>}
+        {page === "Companion" && <><p className="conn-note">This sets the default look for new chats only. To change an existing chat's look, open the history menu "…" on that chat and choose Change look.</p><Companion companion={companion} onChange={onChange} /><div className="row-actions" style={{ marginTop: 16 }}><button className="ghost-btn" type="button" onClick={() => onChange({ companion: emptySettings.companion })}>Reset to defaults</button></div></>}
         {page === "About" && <About demo={demo} />}
       </div>
     </div>
