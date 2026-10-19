@@ -30,8 +30,8 @@ export function EmptyState({
     ? `Hi! I’m ${companionName}. Ask me anything, or share ${title} for context.`
     : `Hi! I’m ${companionName}. What would you like to do?`;
   const tiles = [
-    { id: "fo", label: "Fo", connected: Boolean(foConnected), face: <PactBlob size={20} state="still" appearance={appearance} /> },
-    { id: "page", label: "This page", connected: Boolean(pageConnected), face: <FileText size={20} strokeWidth={1.75} aria-hidden="true" /> },
+    { id: "fo", label: "Fo", hint: foConnected ? "Connected" : "Connect", connected: Boolean(foConnected), face: <PactBlob size={20} state="still" appearance={appearance} /> },
+    { id: "page", label: "This page", hint: pageConnected ? "Reading" : "Read it", connected: Boolean(pageConnected), face: <FileText size={20} strokeWidth={1.75} aria-hidden="true" /> },
   ];
   return (
     <div className="empty">
@@ -45,12 +45,13 @@ export function EmptyState({
         ))}
       </div>
       <section className="can-use">
-        <p>Pact can use</p>
-        <div className="tool-row" aria-label="Pact can use">
+        <p>Give Pact context</p>
+        <div className="tool-row" aria-label="Give Pact context">
           {tiles.map((tile) => (
             <button key={tile.id} className="tool-tile" type="button" onClick={() => { if (tile.id === "page") onRead?.(); else if (!tile.connected) onOpenConnections(); }}>
               <span className="tile-face">{tile.face}<i className={tile.connected ? "dot on" : "dot"} /></span>
               <span className="tile-label">{tile.label}</span>
+              <span className="tile-hint">{tile.hint}</span>
             </button>
           ))}
         </div>

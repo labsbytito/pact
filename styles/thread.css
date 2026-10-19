@@ -483,3 +483,4 @@ html[data-motion="reduced"] .live-dot { animation: none; }
 .library-confirm button.danger { background: var(--danger); color: #fff; }
 
 .library { padding-bottom: 220px; }
+.tile-hint { display: block; font-size: 11px; line-height: 14px; color: var(--text-3); margin-top: 1px; }

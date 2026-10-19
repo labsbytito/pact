@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { PactBlob } from "../companion/PactBlob";
 import type { CompanionAppearance } from "../../lib/character";
 
@@ -17,11 +18,16 @@ export function ServerState({
   onConnect?: () => void;
 }) {
   const copy = {
-    offline: ["Can’t reach Pact", "Your Pacts are still saved on this computer."],
-    limited: ["Pact needs a short break", "Try again in a little while."],
+    offline: ["Can’t reach Pact", "Check your connection. Your Pacts are saved on this computer, and Pact will retry on its own."],
+    limited: ["Pact is busy right now", "A lot of people are trying it. Your chats are safe. Pact will retry on its own."],
     unconfigured: ["Pact isn’t ready yet", dev && model ? `The model ${model} isn’t ready.` : "The Pact service is being set up. Try again soon."],
     fo: ["Connect Fo", "Fo runs the request after you approve it."],
   }[kind];
+  useEffect(() => {
+    if (kind !== "offline" && kind !== "limited") return;
+    const timer = window.setInterval(onRetry, 20000);
+    return () => window.clearInterval(timer);
+  }, [kind, onRetry]);
   return (
     <div className="server">
       <PactBlob state={kind === "offline" ? "sleepy" : kind === "fo" ? "idle" : "error"} size={72} appearance={appearance} />
