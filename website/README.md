@@ -15,6 +15,14 @@ The user supplied `/Users/tito/Downloads/DESIGN (1).md` (Superhuman), `/Users/ti
 
 `assets/horizon-texture.webp` is an original AI-edited cinematic textured horizon with no people, optimized to WebP. `assets/inter.woff2` is Inter Variable, distributed under the included SIL Open Font License. The additional EB Garamond variable fonts (regular and true italic) are locally subsetted and distributed under their included SIL Open Font License. SVG companion is native vector artwork based on Pact's existing round orange character. Product examples are deliberately labeled illustrative; no task is executed by the site.
 
+## Logos
+
+`assets/logos/*.svg` are single-colour brand marks from the CC0-licensed `simple-icons` set (Gmail, Google Calendar, Google Drive, GitHub, Asana, HubSpot, Notion, Linear, Model Context Protocol, Claude). The marks remain trademarks of their owners; the page says so and implies no endorsement.
+
+## Shipping the download
+
+From the repository root: `node scripts/live-smoke.mjs` must pass against the deployed backend, then `node scripts/release.mjs --verified` builds the hosted extension, writes `website/downloads/pact-judges.zip` and flips `release.json` to ready with the real SHA-256. Without `--verified` the script stages the ZIP but leaves the site on "release being prepared". The ZIP the site serves is the same file anyone should load, including the project owner.
+
 ## Release contract
 
 `release.json` starts pending. The functionality/release owner supplies the judge package and confirms the deployed backend plus own-account end-to-end flow before changing it to:
