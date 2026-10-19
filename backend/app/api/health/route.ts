@@ -1,3 +1,4 @@
+import { budgetPaused } from "../../../lib/ai-budget";
 import { aiMocked, foMocked } from "../../../lib/env";
 import { fail, guardOrigin, json } from "../../../lib/http";
 import { bearer } from "../../../lib/http";
@@ -15,8 +16,10 @@ export async function GET(req: Request) {
       sessionFor(installId, req),
     ]);
     const configured = aiMocked() || model.modelVerified;
+    const paused = await budgetPaused();
     return json(req, {
-      ok: configured,
+      ok: configured && !paused,
+      budget: paused ? "paused" : "ok",
       model: model.model,
       modelVerified: model.modelVerified,
       fo: foLabel(session),

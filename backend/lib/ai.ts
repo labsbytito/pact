@@ -1,43 +1,17 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import {
+  BUDGET_PAUSE,
+  BudgetExhausted,
+  budgetSnapshot,
+  costFromUsage,
+  refundBudget,
+  reserveBudget as holdBudget,
+  settleBudget,
+  type TokenUsage,
+} from "./ai-budget";
 import { localPath } from "./paths";
-import { diskForbidden, openStore, redisRestEnv } from "./store";
-const usageFile = localPath("ai-usage.json");
-let spent = 0;
-let reservationQueue: Promise<unknown> = Promise.resolve();
-
-function usageOnStore() {
-  return (
-    diskForbidden() || Boolean(redisRestEnv())
-  );
-}
-
-async function readSpent() {
-  if (usageOnStore()) {
-    const raw = await openStore().get("ai:usage");
-    return Number(raw ? JSON.parse(raw).reserved : 0) || 0;
-  }
-  try {
-    return Number(JSON.parse(await readFile(usageFile, "utf8")).reserved) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function writeSpent(next: number, cap: number) {
-  const body = JSON.stringify({ reserved: next, cap });
-  if (usageOnStore()) {
-    await openStore().set("ai:usage", body);
-    return;
-  }
-  await mkdir(localPath(), { recursive: true, mode: 0o700 });
-  const temp = localPath(`ai-usage.${randomUUID()}.tmp`);
-  await writeFile(temp, body, { mode: 0o600 });
-  await rename(temp, usageFile);
-}
 
 // An error whose message is safe and actionable to show the user as-is.
 export class AiError extends Error {
@@ -56,13 +30,8 @@ export const provider = () =>
       ? "anthropic-api"
       : "none";
 export const aiReady = () => provider() !== "none";
-const limits = () => ({
-  perRequest: Math.min(Number(process.env.PACT_AI_REQUEST_CAP ?? 0.15), 0.5),
-  cap: Number(process.env.PACT_AI_SESSION_CAP ?? 1),
-});
 // Non-secret status for /health: never includes keys, paths or internal ids.
 export function aiStatus() {
-  const { perRequest, cap } = limits();
   const p = provider();
   const model =
     p === "anthropic-api"
@@ -70,40 +39,15 @@ export function aiStatus() {
       : p === "claude-code"
         ? (process.env.PACT_CLAUDE_MODEL ?? "claude-code-default")
         : null;
-  const remaining = Number.isFinite(cap) ? Math.max(0, cap - spent) : 0;
-  return {
-    provider: p,
-    model,
-    budget: {
-      spentUsd: Math.round(spent * 100) / 100,
-      capUsd: Number.isFinite(cap) ? cap : 0,
-      remainingUsd: Math.round(remaining * 100) / 100,
-      perRequestUsd: Number.isFinite(perRequest) ? perRequest : 0,
-      exhausted: !(perRequest > 0) || spent + perRequest > cap,
-    },
-  };
+  return { provider: p, model, budget: budgetSnapshot() };
 }
 export async function reserveBudget() {
-  const { perRequest, cap } = limits();
-  const task = reservationQueue.then(async () => {
-    spent = await readSpent();
-    if (
-      !Number.isFinite(cap) ||
-      !Number.isFinite(perRequest) ||
-      perRequest <= 0 ||
-      spent + perRequest > cap
-    )
-      throw new AiError(
-        "The local prototype AI budget is reached, so Pact paused AI replies. Your Pact is saved.",
-        402,
-      );
-    const next = spent + perRequest;
-    await writeSpent(next, cap);
-    spent = next;
-    return perRequest;
-  });
-  reservationQueue = task.catch(() => {});
-  return task;
+  try {
+    return await holdBudget();
+  } catch (error) {
+    if (error instanceof BudgetExhausted) throw new AiError(BUDGET_PAUSE, 402);
+    throw error;
+  }
 }
 
 // Maps a provider failure to a short actionable message. Raw provider text is never passed through.
@@ -209,13 +153,27 @@ export async function askClaude(
   images: readonly ClaudeImage[] = [],
 ): Promise<string> {
   if (!aiReady()) throw new AiError("AI isn’t connected. Your Pact is saved.");
-  const cap = await reserveBudget();
+  const reserved = await reserveBudget();
+  try {
+    return await completeClaude(system, content, images, reserved);
+  } catch (error) {
+    await refundBudget(reserved);
+    throw error;
+  }
+}
+
+async function completeClaude(
+  system: string,
+  content: string,
+  images: readonly ClaudeImage[],
+  reserved: number,
+): Promise<string> {
   if (provider() === "claude-code") {
     const cliContent =
       images.length === 0
         ? content
         : `${content}\n\n[${images.length} image attachment(s) were included by the user. The CLI path cannot render pixels; rely on attachment names and any text files in the JSON.]`;
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const model = process.env.PACT_CLAUDE_MODEL;
       const child = spawn(
         process.env.PACT_CLAUDE_BIN ?? join(homedir(), ".local/bin/claude"),
@@ -230,7 +188,7 @@ export async function askClaude(
           "--mcp-config",
           '{"mcpServers":{}}',
           "--max-budget-usd",
-          String(cap),
+          String(Math.min(Number(process.env.PACT_AI_REQUEST_CAP ?? 0.15) || 0.15, 0.5)),
           ...(model ? ["--model", model] : []),
           "--system-prompt",
           system,
@@ -271,6 +229,9 @@ export async function askClaude(
         }
       });
       child.stdin.end(cliContent);
+    }).then(async (text) => {
+      await settleBudget(reserved, reserved);
+      return text;
     });
   }
   const messageContent = buildMessageContent(content, images);
@@ -308,6 +269,7 @@ export async function askClaude(
     );
   }
   const body: any = await response.json().catch(() => undefined);
+  await settleBudget(reserved, costFromUsage(body?.usage as TokenUsage) ?? reserved);
   return (
     body?.content
       ?.filter((x: any) => x.type === "text")

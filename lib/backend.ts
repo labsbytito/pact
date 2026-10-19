@@ -4,6 +4,7 @@ import { interpretationContext } from "./context";
 
 export type HealthBody = {
   ok: boolean;
+  budget?: "ok" | "paused";
   model: string | null;
   modelVerified: boolean;
   fo: "signed in" | "needs reconnect" | "signed out";

@@ -8,6 +8,7 @@ import {
   reserveBudget,
   type ClaudeImage,
 } from "./ai";
+import { costFromUsage, refundBudget, settleBudget, type TokenUsage } from "./ai-budget";
 
 export type StreamChunk =
   | { type: "delta"; text: string }
@@ -27,7 +28,15 @@ export async function* askClaudeStream(
       "Streaming needs the Anthropic API. Use the standard reply path.",
       501,
     );
-  await reserveBudget();
+  const reserved = await reserveBudget();
+  let closed = false;
+  const usage: TokenUsage = {};
+  const close = async (mode: "settle" | "refund") => {
+    if (closed) return;
+    closed = true;
+    if (mode === "refund") await refundBudget(reserved);
+    else await settleBudget(reserved, costFromUsage(usage) ?? reserved);
+  };
   const messageContent = buildMessageContent(content, images);
   let response: Response;
   try {
@@ -49,6 +58,7 @@ export async function* askClaudeStream(
       signal,
     });
   } catch (e) {
+    await close("refund");
     if ((e as Error)?.name === "AbortError") return;
     throw new AiError(
       "Pact couldn’t reach Claude. Check your connection and try again. Your Pact is saved.",
@@ -57,19 +67,27 @@ export async function* askClaudeStream(
   }
   if (!response.ok) {
     const body: any = await response.json().catch(() => undefined);
+    await close("refund");
     throw classifyAiFailure(
       `${body?.error?.type ?? ""} ${body?.error?.message ?? ""}`,
       response.status,
     );
   }
-  if (!response.body) throw new AiError("Claude returned an empty stream.", 502);
+  if (!response.body) {
+    await close("refund");
+    throw new AiError("Claude returned an empty stream.", 502);
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let raw = "";
   try {
     while (true) {
-      if (signal?.aborted) break;
+      if (signal?.aborted) {
+        await close("refund");
+        yield { type: "done", raw };
+        return;
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -86,6 +104,7 @@ export async function* askClaudeStream(
         } catch {
           continue;
         }
+        noteUsage(usage, event);
         if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
           const text = String(event.delta.text ?? "");
           if (text) {
@@ -93,6 +112,7 @@ export async function* askClaudeStream(
             yield { type: "delta", text };
           }
         } else if (event.type === "error") {
+          await close("refund");
           yield {
             type: "error",
             error: classifyAiFailure(
@@ -104,6 +124,7 @@ export async function* askClaudeStream(
       }
     }
   } catch (e) {
+    await close("refund");
     if ((e as Error)?.name === "AbortError") {
       yield { type: "done", raw };
       return;
@@ -114,7 +135,16 @@ export async function* askClaudeStream(
       reader.releaseLock();
     } catch {}
   }
+  await close("settle");
   yield { type: "done", raw };
+}
+
+function noteUsage(usage: TokenUsage, event: any) {
+  const reported = event?.message?.usage ?? event?.usage;
+  if (!reported || typeof reported !== "object") return;
+  for (const key of ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"] as const) {
+    if (typeof reported[key] === "number") usage[key] = reported[key];
+  }
 }
 
 export const canStream = () => provider() === "anthropic-api";
