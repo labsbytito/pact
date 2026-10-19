@@ -54,10 +54,10 @@ The app Vercel builds is `backend/` (Next.js App Router). `pnpm --filter backend
 | `FO_TOKEN_ENC_KEY` | `openssl rand -base64 32`. It must decode to exactly 32 bytes. |
 | `ANTHROPIC_API_KEY` | Claude API key used for live replies |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` |
-| `PUBLIC_BASE_URL` | `https://<your-deployment-host>` with no trailing slash |
+| `PUBLIC_BASE_URL` | `https://pact-nine-lyart.vercel.app` |
 | `ALLOWED_EXTENSION_IDS` | `iogfficoaeonclfkgdjfgfdiofdjcbnn` |
-| `UPSTASH_REDIS_REST_URL` | Upstash REST URL |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |
+| `UPSTASH_REDIS_REST_URL` | Upstash REST URL. `KV_REST_API_URL` works as the same value |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token. `KV_REST_API_TOKEN` works as the same value |
 
 Leave `PACT_AI` and `FO_MODE` unset. Vercel sets `VERCEL_ENV=production`, and that environment refuses mocks. Leave `PACT_FO_CONSEQUENTIAL` unset so Pact only proposes `ask_fo` and Fo reads.
 
@@ -65,11 +65,11 @@ Leave `PACT_AI` and `FO_MODE` unset. Vercel sets `VERCEL_ENV=production`, and th
 
 The Fo OAuth callback is exactly:
 
-`https://<your-deployment-host>/api/fo/callback`
+`https://pact-nine-lyart.vercel.app/api/fo/callback`
 
 That is `${PUBLIC_BASE_URL}/api/fo/callback`. Fo redirects the browser there after **Connect Fo**. `PUBLIC_BASE_URL` and this callback must be the same host.
 
-`.env.production` holds one placeholder, `WXT_PUBLIC_PACT_API=https://pact.vercel.app`, until the real deployment URL exists. Change that single line, then run `pnpm zip:release` again. The release script reads `.env.production` and bakes that URL into the extension.
+`.env.production` sets `WXT_PUBLIC_PACT_API=https://pact-nine-lyart.vercel.app`. `pnpm zip:release` reads that file and bakes the URL into the extension. `pnpm dev` and `pnpm build` stay on localhost.
 
 ## Extension for judges
 

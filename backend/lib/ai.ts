@@ -4,15 +4,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { localPath } from "./paths";
-import { diskForbidden, openStore } from "./store";
+import { diskForbidden, openStore, redisRestEnv } from "./store";
 const usageFile = localPath("ai-usage.json");
 let spent = 0;
 let reservationQueue: Promise<unknown> = Promise.resolve();
 
 function usageOnStore() {
   return (
-    diskForbidden() ||
-    Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+    diskForbidden() || Boolean(redisRestEnv())
   );
 }
 

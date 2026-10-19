@@ -78,10 +78,27 @@ export function fileStore(path = storePath()): Store {
   };
 }
 
+/** Upstash's own names, or the Vercel Marketplace integration's KV names. */
+export function redisRestFrom(env: NodeJS.ProcessEnv): { url: string; token: string } | null {
+  const upstashUrl = env.UPSTASH_REDIS_REST_URL;
+  const upstashToken = env.UPSTASH_REDIS_REST_TOKEN;
+  if (upstashUrl && upstashToken) return { url: upstashUrl, token: upstashToken };
+  const kvUrl = env.KV_REST_API_URL;
+  const kvToken = env.KV_REST_API_TOKEN;
+  if (kvUrl && kvToken) return { url: kvUrl, token: kvToken };
+  return null;
+}
+
+export function redisRestEnv() {
+  return redisRestFrom(process.env);
+}
+
 export function redisStore(): Store {
+  const creds = redisRestEnv();
+  if (!creds) throw new Error("Redis REST credentials are not set");
   const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    url: creds.url,
+    token: creds.token,
   });
   return {
     async get(key) {
@@ -105,13 +122,10 @@ const processStore = globalThis as typeof globalThis & { __pactStore?: Store };
 export function openStore() {
   if (processStore.__pactStore) return processStore.__pactStore;
   if (process.env.PACT_STORE === "memory") processStore.__pactStore = memoryStore();
-  else if (
-    process.env.UPSTASH_REDIS_REST_URL &&
-    process.env.UPSTASH_REDIS_REST_TOKEN
-  )
+  else if (redisRestEnv())
     processStore.__pactStore = redisStore();
   else if (diskForbidden())
-    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required");
+    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, or KV_REST_API_URL and KV_REST_API_TOKEN, are required");
   else processStore.__pactStore = fileStore();
   return processStore.__pactStore;
 }

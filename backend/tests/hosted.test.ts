@@ -7,7 +7,7 @@ import test from "node:test";
 import { issueInstallToken, readInstallId } from "../lib/auth";
 import { decryptString, encryptString } from "../lib/crypto";
 import { limitInstall } from "../lib/rate-limit";
-import { fileStore, memoryStore, useStore } from "../lib/store";
+import { fileStore, memoryStore, redisRestFrom, useStore } from "../lib/store";
 import { Threads } from "../lib/fo-task";
 
 test("install token round trip rejects a bad mac", () => {
@@ -46,6 +46,27 @@ test("memory and file stores round trip and expire", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("redis rest env accepts a complete Upstash pair or a complete KV pair", () => {
+  assert.deepEqual(
+    redisRestFrom({ UPSTASH_REDIS_REST_URL: "https://upstash.example", UPSTASH_REDIS_REST_TOKEN: "upstash-token" }),
+    { url: "https://upstash.example", token: "upstash-token" },
+  );
+  assert.deepEqual(
+    redisRestFrom({ KV_REST_API_URL: "https://kv.example", KV_REST_API_TOKEN: "kv-token" }),
+    { url: "https://kv.example", token: "kv-token" },
+  );
+  assert.equal(redisRestFrom({ UPSTASH_REDIS_REST_URL: "https://upstash.example" }), null);
+  assert.deepEqual(
+    redisRestFrom({
+      UPSTASH_REDIS_REST_URL: "https://upstash.example",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token",
+      KV_REST_API_URL: "https://kv.example",
+      KV_REST_API_TOKEN: "kv-token",
+    }),
+    { url: "https://upstash.example", token: "upstash-token" },
+  );
 });
 
 test("thread handles persist through the store", async () => {
