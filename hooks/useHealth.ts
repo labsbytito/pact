@@ -15,6 +15,7 @@ export function useHealth() {
   const refresh = useCallback(async () => {
     try {
       const health = await loadHealth();
+      if (health.budget === "paused") { setLink({ kind: "limited" }); return; }
       if (!health.configured && !health.modelVerified)
         setLink({ kind: "unconfigured", model: health.model ?? "claude-sonnet-5-5" });
       else if (health.fo !== "signed in") setLink({ kind: "fo", health });

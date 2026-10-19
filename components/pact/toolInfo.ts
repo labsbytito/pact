@@ -15,7 +15,7 @@ export function toolInfo(name: string | undefined, description?: string): ToolIn
   return { name: label.charAt(0).toUpperCase() + label.slice(1), group: "Other", can: description?.trim() || "No description provided by Fo." };
 }
 
-export function summarize(text: string, max = 90) {
+export function summarize(text: string, max = 150) {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 }

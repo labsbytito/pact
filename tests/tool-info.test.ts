@@ -6,5 +6,5 @@ test("known tools get plain names and unknown tools fall back honestly", () => {
   assert.equal(toolInfo("ask_fo").name, "Ask Fo");
   assert.equal(toolInfo("send_thing", "Does a thing").can, "Does a thing");
   assert.equal(toolInfo("send_thing").name, "Send thing");
-  assert.ok(summarize("a ".repeat(100)).length <= 90);
+  assert.ok(summarize("a ".repeat(100)).length <= 150);
 });

@@ -13,7 +13,8 @@ function apiOrigin() {
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: ({ mode }) => {
-    const hosts = new Set<string>([`${apiOrigin()}/*`]);
+    // Pact reads whichever page you open it on (YouTube, Reddit, docs, PDFs). Granting all sites up front means no per-site prompts.
+    const hosts = new Set<string>([`${apiOrigin()}/*`, "http://*/*", "https://*/*"]);
     if (mode === "development") {
       hosts.add("http://localhost:3000/*");
       hosts.add("http://127.0.0.1:3000/*");
@@ -25,7 +26,6 @@ export default defineConfig({
       description: "Read a page, pick one next step, and let Fo do it after you approve.",
       permissions: ["storage", "activeTab", "scripting", "sidePanel", "contextMenus"],
       host_permissions: [...hosts],
-      optional_host_permissions: ["http://*/*", "https://*/*"],
       action: { default_title: "Make a Pact" },
       commands: {
         open_pact: {

@@ -74,7 +74,7 @@ export function SettingsSheet({
         <h2>{page}</h2>
         {page === "General" && <General settings={settings} onChange={onChange} />}
         {page === "Connections" && <Connections fo={fo} onRefresh={onRefresh} onDeleted={onDeleted} />}
-        {page === "Companion" && <><p className="conn-note">This sets the default look for new Pacts only. To change an existing chat's look, open the history menu "…" on that chat and choose Change look.</p><Companion companion={companion} onChange={onChange} /><div className="row-actions" style={{ marginTop: 16 }}><button className="ghost-btn" type="button" onClick={() => onChange({ companion: emptySettings.companion })}>Reset to defaults</button></div></>}
+        {page === "Companion" && <><p className="conn-note">This sets the default look for new chats only. To change an existing chat's look, open the history menu "…" on that chat and choose Change look.</p><Companion companion={companion} onChange={onChange} /><div className="row-actions" style={{ marginTop: 16 }}><button className="ghost-btn" type="button" onClick={() => onChange({ companion: emptySettings.companion })}>Reset to defaults</button></div></>}
         {page === "About" && <About demo={demo} />}
       </div>
     </div>
@@ -116,8 +116,8 @@ function General({ settings, onChange }: { settings: Settings; onChange: (patch:
           { value: "short", label: "Short" },
           { value: "detailed", label: "Detailed" },
         ]} onChange={(value) => onChange({ responseStyle: value as ResponseStyle })} />
-        <MenuSelect label="Ask before acting" hint="When Pact must get your OK before sending a request to Fo." value={settings.askBefore ?? "suggested"} options={[
-          { value: "suggested", label: "Only for things Pact suggests" },
+        <MenuSelect label="Ask before acting" hint="Suggested only: you approve what Pact proposes. Always: you approve every request." value={settings.askBefore ?? "suggested"} options={[
+          { value: "suggested", label: "Suggested only" },
           { value: "always", label: "Always" },
         ]} onChange={(value) => onChange({ askBefore: value as AskBefore })} />
         <MenuSelect label="Send with Enter" hint="On: Enter sends, Shift+Enter adds a line. Off: Enter adds a line." value={settings.sendWithEnter === false ? "off" : "on"} options={[
