@@ -1,127 +1,186 @@
+import type { CaptionApi } from "./captions";
 import type { Source } from "./model";
+import { pickPageElement } from "./page-reader-pick";
+import { applyYoutubeCaptions } from "./page-reader-video";
 export type CaptureMode = "page" | "selection" | "pick";
-// Self-contained: Chrome serializes this function into the invoked page.
 export async function readPageSnapshot(
   mode: CaptureMode = "page",
   suppliedSelection = "",
+  caps?: CaptionApi,
 ): Promise<Source | { captureError: string }> {
   try {
     const initialUrl = location.href;
     const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+    const amount = () => clean(document.body?.textContent || "").length;
+    const queryAll = (
+      root: { querySelectorAll?: (selector: string) => Iterable<Element> },
+      selector: string,
+    ) =>
+      typeof root?.querySelectorAll === "function"
+        ? Array.from(root.querySelectorAll(selector))
+        : [];
+    const shadowRoots = () => {
+      const roots: (Document | ShadowRoot)[] = [document];
+      for (let i = 0; i < roots.length && i < 100; i++)
+        for (const element of queryAll(roots[i]!, "*").slice(0, 12000))
+          if (element.shadowRoot && roots.length < 80)
+            roots.push(element.shadowRoot);
+      return roots;
+    };
+    const settleReadableContent = async () => {
+      if (typeof MutationObserver !== "function" || amount() > 500) return;
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          try {
+            observer.disconnect();
+          } catch {
+            /* The page may already have gone away. */
+          }
+          resolve();
+        };
+        const observer = new MutationObserver(() => {
+          if (amount() > 500) finish();
+        });
+        try {
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        } catch {
+          finish();
+          return;
+        }
+        setTimeout(finish, 1500);
+      });
+    };
+    const blockText = () => {
+      const blocks: string[] = [];
+      const seen = new Set<Element>();
+      let length = 0;
+      for (const root of shadowRoots())
+        for (const el of queryAll(
+          root,
+          "article p, main p, p, h1, h2, h3, li, blockquote, pre",
+        ).slice(0, 500)) {
+          if (seen.has(el)) continue;
+          seen.add(el);
+          if (el.closest("nav,footer,aside,script,style,noscript")) continue;
+          const value = clean(el.textContent || "");
+          if (value.length < 30) continue;
+          blocks.push(value);
+          length += value.length;
+          if (length > 14000) return clean(blocks.join("\n")).slice(0, 14000);
+        }
+      return clean(blocks.join("\n")).slice(0, 14000);
+    };
+    const grabText = (selector: string, limit: number) => {
+      const found: string[] = [];
+      for (const root of shadowRoots()) {
+        for (const node of queryAll(root, selector)) {
+          if (found.length >= limit) return found;
+          const value = clean(node.textContent || "");
+          if (value.length > 1) found.push(value);
+        }
+      }
+      return found;
+    };
+    const siteSpecificText = () => {
+      const host = location.hostname;
+      if (/(^|\.)youtube\.com$/.test(host)) {
+        const description = grabText(
+          "#description-inline-expander, #attributed-snippet-text, ytd-text-inline-expander, ytd-watch-metadata #description, #description yt-formatted-string",
+          4,
+        );
+        const comments = grabText(
+          "ytd-comment-view-model #content-text, ytd-comment-thread-renderer #content-text, #content-text",
+          30,
+        );
+        return [
+          description.length ? `Description: ${description.join(" ")}` : "",
+          comments.length ? `Comments: ${comments.join(" · ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      if (/(^|\.)reddit\.com$/.test(host))
+        return [
+          grabText("shreddit-comment", 30).join("\n"),
+          grabText(".comment .usertext-body, .comment .md", 30).join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n");
+      if (/(^|\.)quora\.com$/.test(host))
+        return grabText(".q-text, .qu-userSelect--text", 20).join("\n");
+      if (/(^|\.)x\.com$/.test(host) || /(^|\.)twitter\.com$/.test(host))
+        return grabText("[data-testid='tweetText']", 20).join("\n");
+      if (/(^|\.)github\.com$/.test(host))
+        return grabText("article.markdown-body, #readme", 12).join("\n");
+      return "";
+    };
+    const consentNote = () => {
+      const dialog = document.querySelector(
+        "#onetrust-banner-sdk, [aria-label*='cookie' i], [aria-label*='consent' i]",
+      );
+      const value = clean(dialog?.textContent || "");
+      if (value.length < 40) return "";
+      return "A cookie or sign-in prompt is on this page. Pact did not accept it.";
+    };
+    const nudgeComments = async () => {
+      const host = location.hostname;
+      const mayHaveComments =
+        /(^|\.)youtube\.com$/.test(host) ||
+        /(^|\.)reddit\.com$/.test(host) ||
+        !!document.querySelector(
+          "ytd-comments, #comments, shreddit-comment-tree",
+        );
+      if (!mayHaveComments) return;
+      const scroller = document.scrollingElement;
+      if (!scroller) return;
+      const start = scroller.scrollTop;
+      const comments = () =>
+        document.querySelector(
+          "ytd-comments, #comments, shreddit-comment-tree",
+        );
+      try {
+        const first = comments();
+        if (first && typeof first.scrollIntoView === "function")
+          first.scrollIntoView({ block: "start" });
+        for (let step = 0; step < 4; step++) {
+          scroller.scrollTop = Math.min(
+            scroller.scrollHeight,
+            scroller.scrollTop + Math.max(innerHeight, 700),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          if (comments() && step >= 1) break;
+        }
+      } finally {
+        scroller.scrollTop = start;
+      }
+    };
     const blocked = (element: Element) =>
       !!element.closest(
         'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[data-pact-picker]',
       );
     let picked: Element | undefined;
-    if (mode === "pick") {
-      picked = await new Promise<Element>((resolve, reject) => {
-        const overlay = document.createElement("div");
-        overlay.dataset.pactPicker = "true";
-        overlay.style.cssText =
-          "position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #dc735d;background:#dc735d12;border-radius:5px;display:none;";
-        const hint = document.createElement("div");
-        hint.dataset.pactPicker = "true";
-        hint.textContent = "Pact · Click an item to share it · Esc to cancel";
-        hint.style.cssText =
-          "position:fixed;z-index:2147483647;top:12px;left:50%;transform:translateX(-50%);pointer-events:none;background:#292a2e;color:white;padding:10px 16px;border-radius:9px;font:14px system-ui;max-width:90vw;text-align:center;";
-        document.documentElement.append(overlay, hint);
-        let target: Element | undefined;
-        const choose = (event: MouseEvent) => {
-          const hit = event
-            .composedPath()
-            .find((node) => node instanceof Element && !blocked(node)) as
-            Element | undefined;
-          if (
-            !hit ||
-            hit === document.documentElement ||
-            hit === document.body ||
-            blocked(event.target as Element)
-          ) {
-            target = undefined;
-            overlay.style.display = "none";
-            return;
-          }
-          target =
-            hit.closest(
-              'shreddit-post,article,[role="article"],[data-testid="post-container"],figure,li,p,h1,h2,h3,h4,a',
-            ) ?? hit;
-          const rect = target.getBoundingClientRect();
-          Object.assign(overlay.style, {
-            display: "block",
-            left: `${rect.left}px`,
-            top: `${rect.top}px`,
-            width: `${rect.width}px`,
-            height: `${rect.height}px`,
-          });
-        };
-        const cleanup = () => {
-          overlay.remove();
-          hint.remove();
-          window.removeEventListener("mousemove", choose, true);
-          window.removeEventListener("click", click, true);
-          for (const type of [
-            "pointerdown",
-            "pointerup",
-            "mousedown",
-            "mouseup",
-          ] as const)
-            window.removeEventListener(type, blockActivation, true);
-          window.removeEventListener("keydown", key, true);
-          clearTimeout(timer);
-        };
-        const blockActivation = (event: MouseEvent) => {
-          choose(event);
-          if (target) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-          }
-        };
-        const click = (event: MouseEvent) => {
-          choose(event);
-          if (!target) return;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          const selected = target;
-          cleanup();
-          resolve(selected);
-        };
-        const key = (event: KeyboardEvent) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            cleanup();
-            reject(new Error("Selection cancelled."));
-          }
-        };
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(
-            new Error("Selection timed out. Choose Select item to try again."),
-          );
-        }, 45000);
-        window.addEventListener("mousemove", choose, true);
-        window.addEventListener("click", click, true);
-        for (const type of [
-          "pointerdown",
-          "pointerup",
-          "mousedown",
-          "mouseup",
-        ] as const)
-          window.addEventListener(type, blockActivation, true);
-        window.addEventListener("keydown", key, true);
-      });
-    }
+    if (mode === "pick") picked = await pickPageElement(blocked);
     if (location.href !== initialUrl)
       throw new Error("The page changed. Read the current page again.");
-    const roots: (Document | ShadowRoot)[] = [document];
+    if (mode !== "pick") {
+      await settleReadableContent();
+      try {
+        await nudgeComments();
+      } catch {
+        /* A scroll that the page rejects should not hide text already on screen. */
+      }
+      if (location.href !== initialUrl)
+        throw new Error("The page changed. Read the current page again.");
+    }
     // Open shadow DOM contains the actual post text on modern Reddit and other sites.
-    for (let i = 0; i < roots.length && i < 60; i++)
-      for (const element of Array.from(roots[i]!.querySelectorAll("*")).slice(
-        0,
-        12000,
-      ))
-        if (element.shadowRoot && roots.length < 60)
-          roots.push(element.shadowRoot);
+    const roots = shadowRoots();
     const textOf = (element: Element): string => {
       if (blocked(element)) return "";
       const parts: string[] = [];
@@ -130,10 +189,7 @@ export async function readPageSnapshot(
       const subtrees: (Element | ShadowRoot)[] = [element];
       for (let i = 0; i < subtrees.length && i < 40 && length < 32000; i++) {
         const root = subtrees[i]!;
-        for (const host of [
-          root,
-          ...Array.from(root.querySelectorAll("*")).slice(0, 4000),
-        ])
+        for (const host of [root, ...queryAll(root, "*").slice(0, 4000)])
           if (host instanceof Element && host.shadowRoot && !blocked(host))
             subtrees.push(host.shadowRoot);
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -147,9 +203,7 @@ export async function readPageSnapshot(
           if (
             !parent ||
             blocked(parent) ||
-            parent.closest(
-              'script,style,noscript,nav,aside,footer,[aria-hidden="true"]',
-            )
+            parent.closest("script,style,noscript,nav,aside,footer")
           )
             continue;
           const value = clean(node.textContent ?? "");
@@ -247,10 +301,9 @@ export async function readPageSnapshot(
       'shreddit-post,article,[role="article"],[data-testid="post-container"],section,li',
     );
     const candidates = roots.flatMap((root) =>
-      Array.from(
-        root.querySelectorAll(
-          'shreddit-post,article,[role="article"],[data-testid="post-container"],main,[role="main"]',
-        ),
+      queryAll(
+        root,
+        'shreddit-post,article,[role="article"],[data-testid="post-container"],main,[role="main"]',
       ),
     );
     const score = (element: Element) => {
@@ -271,7 +324,16 @@ export async function readPageSnapshot(
       surrounding ??
       candidates.sort((a, b) => score(b) - score(a))[0] ??
       document.body;
-    const articleText = content ? textOf(content) : "";
+    let pageBody = content ? textOf(content) : "";
+    if (pageBody.length < 240) {
+      const blocks = blockText();
+      if (blocks.length > pageBody.length) pageBody = blocks;
+    }
+    const extra = siteSpecificText();
+    if (extra) pageBody = `${pageBody}\n\n${extra}`.trim().slice(0, 14000);
+    const wall = consentNote();
+    if (wall) pageBody = `${wall}\n\n${pageBody}`.trim();
+    const articleText = pageBody;
     const selectionContext = surrounding
       ? textOf(surrounding).slice(0, 6000)
       : pickedText.slice(0, 6000);
@@ -309,110 +371,11 @@ export async function readPageSnapshot(
         visited >= 18000 ||
         visibleLength >= 14000 ||
         articleText.length >= 32000,
-      videoTime: isYoutube ? video?.currentTime : undefined,
+      videoTime: isYoutube ? undefined : video?.currentTime,
       transcript: [],
       transcriptStatus: isYoutube ? "unavailable" : "not-video",
     };
-    if (isYoutube) {
-      const videoId =
-        url.searchParams.get("v") ??
-        url.pathname.split("/shorts/")[1]?.split("/")[0];
-      type Player = {
-        videoDetails?: { videoId: string };
-        captions?: {
-          playerCaptionsTracklistRenderer?: {
-            captionTracks?: { baseUrl: string; languageCode: string }[];
-          };
-        };
-      };
-      const playerElement = document.getElementById("movie_player") as
-        (HTMLElement & { getPlayerResponse?: () => Player }) | null;
-      const player =
-        playerElement?.getPlayerResponse?.() ??
-        (window as unknown as { ytInitialPlayerResponse?: Player })
-          .ytInitialPlayerResponse;
-      // Never use a previous video's player response after YouTube SPA navigation.
-      if (videoId && player && player.videoDetails?.videoId === videoId) {
-        try {
-          const tracks =
-            player.captions?.playerCaptionsTracklistRenderer?.captionTracks ??
-            [];
-          const track =
-            tracks.find(
-              (t) =>
-                t.languageCode === document.documentElement.lang.split("-")[0],
-            ) ??
-            tracks.find((t) => t.languageCode === "en") ??
-            tracks[0];
-          if (track) {
-            const endpoint = new URL(track.baseUrl);
-            endpoint.searchParams.set("fmt", "json3");
-            if (
-              endpoint.protocol === "https:" &&
-              /(^|\.)youtube\.com$/.test(endpoint.hostname)
-            ) {
-              const response = await fetch(endpoint, {
-                signal: AbortSignal.timeout(8000),
-              });
-              if (response.ok) {
-                const body = await response.json();
-                source.transcript = (body.events ?? [])
-                  .filter((e: any) => Array.isArray(e.segs))
-                  .map((e: any) => ({
-                    start: (e.tStartMs ?? 0) / 1000,
-                    text: clean(e.segs.map((s: any) => s.utf8 ?? "").join("")),
-                  }))
-                  .filter((e: any) => e.text && Number.isFinite(e.start));
-              }
-            }
-          }
-        } catch {
-          /* Speech is unavailable unless real captions were read. */
-        }
-        if (
-          !source.transcript.length &&
-          document
-            .querySelector("ytd-watch-flexy")
-            ?.getAttribute("video-id") === videoId
-        ) {
-          source.transcript = Array.from(
-            document.querySelectorAll("ytd-transcript-segment-renderer"),
-          )
-            .map((row) => ({
-              start: (
-                row.querySelector(".segment-timestamp")?.textContent?.trim() ??
-                "0"
-              )
-                .split(":")
-                .reduce((n, v) => n * 60 + Number(v), 0),
-              text: clean(
-                row.querySelector(".segment-text")?.textContent ?? "",
-              ),
-            }))
-            .filter((row) => row.text && Number.isFinite(row.start));
-        }
-      }
-      let budget = 100000;
-      const sorted = [...source.transcript].sort(
-        (a, b) =>
-          Math.abs(a.start - (source.videoTime ?? 0)) -
-          Math.abs(b.start - (source.videoTime ?? 0)),
-      );
-      const retained: Source["transcript"] = [];
-      for (const line of sorted) {
-        if (retained.length >= 2000 || budget <= 0) break;
-        const text = line.text.slice(0, Math.min(1000, budget));
-        budget -= text.length;
-        retained.push({ ...line, text });
-      }
-      source.transcriptPartial =
-        retained.length < source.transcript.length ||
-        source.transcript.some((x) => x.text.length > 1000);
-      source.transcript = retained.sort((a, b) => a.start - b.start);
-      source.transcriptStatus = source.transcript.length
-        ? "available"
-        : "unavailable";
-    }
+    await applyYoutubeCaptions(source, caps, initialUrl, isYoutube);
     if (location.href !== initialUrl)
       throw new Error(
         "The page changed while Pact was reading it. Read the current page again.",

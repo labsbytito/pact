@@ -1,0 +1,23 @@
+.blob { display: inline-grid; place-items: center; }
+.blob svg { display: block; overflow: visible; }
+.blob-body { transform-origin: 50% 100%; transform-box: fill-box; }
+.blob[data-motion="on"][data-state="idle"] .blob-body,
+.blob[data-motion="on"][data-state="greeting"] .blob-body,
+.blob[data-motion="on"][data-state="happy"] .blob-body {
+  animation: breathe 4.8s ease-in-out infinite;
+}
+.blob[data-motion="on"][data-state="thinking"] .blob-body { animation: breathe 6.4s ease-in-out infinite; }
+.blob[data-motion="on"][data-state="speaking"] .blob-body { animation: speak 1.8s ease-in-out infinite; }
+.blob[data-motion="on"][data-state="sleepy"] .blob-body { animation: breathe 7s ease-in-out infinite; }
+.blob[data-motion="reduced"] .blob-body { animation: breathe 8s ease-in-out infinite; }
+.blob[data-motion="off"] .blob-body,
+.blob[data-live="off"] .blob-body { animation: none; }
+.blob .eye { transform-origin: center; transform-box: fill-box; }
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+@keyframes speak {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.018); }
+}

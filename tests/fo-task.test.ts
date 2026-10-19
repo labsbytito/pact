@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { settleFo } from "../server/fo-task";
+import { settleFo } from "../backend/lib/fo-task";
 test("working Fo requests are polled to their real response without exposing handles", async () => {
   const calls: any[] = [];
   const progress: string[] = [];

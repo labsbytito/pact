@@ -3,7 +3,7 @@
 ## Confirmed (live-verified by main chat)
 - MCP endpoint: `https://mcp.api.wajo.ai/fo` (Streamable HTTP).
 - Metadata `https://mcp.api.wajo.ai/.well-known/oauth-authorization-server`: `registration_endpoint` = `https://mcp.api.wajo.ai/oauth/register`, `token_endpoint_auth_methods_supported` = `['none']`, `scopes_supported` = `['mcp']`, PKCE `S256`.
-- Pact registers as a public client (`token_endpoint_auth_method: none`, scope `mcp`), redirect `http://127.0.0.1:4317/oauth/callback`. PKCE is handled by the MCP SDK `auth()` flow via the provider's `saveCodeVerifier`/`codeVerifier`.
+- Pact registers as a public client (`token_endpoint_auth_method: none`, scope `mcp`). The hosted callback is `${PUBLIC_BASE_URL}/api/fo/callback`. Local dev uses the same route on `http://localhost:3000`. PKCE is handled by the MCP SDK `auth()` flow via the provider's `saveCodeVerifier`/`codeVerifier`.
 
 ## Not done / limitations
 - No authentication or Fo call was made in this task. The Fo tool list is unverified.

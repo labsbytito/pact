@@ -6,7 +6,7 @@ import {
   classifyAiFailure,
   parseModelReply,
   readCliResult,
-} from "../server/ai";
+} from "../backend/lib/ai";
 
 test("aiStatus exposes provider, model and budget but never keys", () => {
   const saved = { ...process.env };

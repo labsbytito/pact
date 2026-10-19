@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   capturePage,
+  pageAccess,
   pendingSelection,
   type SelectionRequest,
 } from "../lib/capture";
@@ -31,6 +32,8 @@ function setup(
     afterId?: number;
     windowId?: number;
     selection?: SelectionRequest;
+    tabUrl?: string | null;
+    pendingUrl?: string;
   } = {},
 ) {
   const original = (globalThis as any).chrome;
@@ -38,6 +41,7 @@ function setup(
     executions = 0,
     removed = false;
   const selected = { id: 4, windowId: 8, url: source.url, active: true };
+  const firstUrl = options.tabUrl === undefined ? source.url : options.tabUrl;
   const chrome = {
     runtime: { id: "test" },
     windows: {
@@ -61,19 +65,29 @@ function setup(
     tabs: {
       async query() {
         queries++;
-        return [
-          {
-            ...selected,
-            id: queries > 1 ? (options.afterId ?? 4) : 4,
-            url: queries > 1 ? (options.afterUrl ?? source.url) : source.url,
-          },
-        ];
+        const later = queries > 1;
+        const url = later ? (options.afterUrl ?? source.url) : firstUrl;
+        const tab: {
+          id: number;
+          windowId: number;
+          active: boolean;
+          url?: string;
+          pendingUrl?: string;
+        } = {
+          ...selected,
+          id: later ? (options.afterId ?? 4) : 4,
+        };
+        if (url == null) delete tab.url;
+        else tab.url = url;
+        if (!later && options.pendingUrl) tab.pendingUrl = options.pendingUrl;
+        return [tab];
       },
     },
     scripting: {
       async executeScript(
         request: any,
       ): Promise<{ result: Source | { captureError: string } }[]> {
+        if (request.files) return [];
         executions++;
         assert.equal(request.target.tabId, 4);
         return [
@@ -168,6 +182,7 @@ test("old selection handoffs cannot silently reappear when the panel reopens", a
 test("the click-to-pick request uses the same guarded tab target", async (t) => {
   const { chrome } = setup(t);
   chrome.scripting.executeScript = async (request: any) => {
+    if (request.files) return [];
     assert.equal(request.args[0], "pick");
     return [
       {
@@ -191,6 +206,107 @@ test("per-window invocation wins over a newer invocation from another window", a
     pactSelection: undefined,
   });
   assert.equal((await capturePage()).tabId, 4);
+});
+test("select item scripts ordinary http and https pages", async (t) => {
+  for (const tabUrl of [
+    "https://example.org/current",
+    "http://example.org/post",
+    "https://chromewebstore.google.com.evil.example/detail",
+    "https://chrome.google.com/search?q=webstore",
+  ]) {
+    const state = setup(t, { tabUrl });
+    const result = await capturePage("pick");
+    assert.equal(result.tabId, 4);
+    assert.equal(state.executions, 1, tabUrl);
+  }
+});
+test("a loading tab is judged by pendingUrl only while the committed url is empty", async (t) => {
+  const state = setup(t, {
+    tabUrl: "",
+    pendingUrl: "https://example.org/current",
+  });
+  assert.equal((await capturePage("pick")).tabId, 4);
+  assert.equal(state.executions, 1);
+});
+test("a page whose URL is hidden asks for a toolbar click and is not called protected", async (t) => {
+  for (const tabUrl of [null, ""]) {
+    const state = setup(t, { tabUrl });
+    await assert.rejects(capturePage("pick"), (error: Error) => {
+      assert.match(error.message, /toolbar icon/);
+      assert.equal(/protects this page/.test(error.message), false);
+      return true;
+    });
+    assert.equal(state.executions, 0, String(tabUrl));
+  }
+});
+test("select item shows the protected-page message only for genuinely restricted pages", async (t) => {
+  const blocked = [
+    "chrome://newtab/",
+    "chrome-extension://abcdefghijklmnop/panel.html",
+    "edge://settings/",
+    "about:blank",
+    "devtools://devtools/bundled/inspector.html",
+    "view-source:https://example.org/",
+    "file:///tmp/notes.html",
+    "chrome-untrusted://new-tab-page/",
+    "chrome-search://local-ntp/local-ntp.html",
+    "https://chromewebstore.google.com/detail/pact",
+    "https://chrome.google.com/webstore/detail/pact",
+    "https://chrome.google.com/webstore",
+  ];
+  for (const tabUrl of blocked) {
+    const state = setup(t, { tabUrl });
+    await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+    assert.equal(state.executions, 0, String(tabUrl));
+  }
+  const state = setup(t, {
+    tabUrl: "chrome://newtab/",
+    pendingUrl: "https://example.org/current",
+  });
+  await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+  assert.equal(state.executions, 0);
+});
+test("a pdf is reported directly and is not injected", async (t) => {
+  for (const tabUrl of [
+    "https://example.org/files/notes.pdf",
+    "https://example.org/files/notes.PDF",
+    "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+  ]) {
+    const state = setup(t, { tabUrl });
+    await assert.rejects(capturePage("pick"), /PDF viewer/);
+    assert.equal(state.executions, 0, tabUrl);
+  }
+});
+test("a missing host permission asks for one-click access instead of an empty read", async (t) => {
+  const { chrome } = setup(t);
+  chrome.scripting.executeScript = async () => {
+    throw new Error(
+      'Cannot access contents of url "https://example.org/current". Extension manifest must request permission to access this host.',
+    );
+  };
+  await assert.rejects(capturePage("pick"), /permission to read this site/);
+});
+test("a gallery or chrome scripting refusal stays the protected-page message", async (t) => {
+  const { chrome } = setup(t);
+  chrome.scripting.executeScript = async () => {
+    throw new Error("The extensions gallery cannot be scripted.");
+  };
+  await assert.rejects(capturePage("pick"), /Chrome protects this page/);
+});
+test("page access allows ordinary web URLs and blocks restricted ones", () => {
+  assert.equal(pageAccess("https://example.org/a"), "web");
+  assert.equal(pageAccess("http://127.0.0.1:4317/health"), "web");
+  assert.equal(pageAccess("https://chrome.google.com/intl/en/chrome/"), "web");
+  assert.equal(pageAccess(undefined), "restricted");
+  assert.equal(pageAccess("chrome://settings"), "restricted");
+  assert.equal(
+    pageAccess("https://chromewebstore.google.com/detail/x"),
+    "restricted",
+  );
+  assert.equal(
+    pageAccess("https://chromewebstore.google.com.evil.example/"),
+    "web",
+  );
 });
 test("embedded-frame selections fail explicitly instead of claiming the parent page as their source", async (t) => {
   const state = setup(t);

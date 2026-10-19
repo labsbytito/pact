@@ -1,0 +1,6 @@
+[
+  { "timestamp": "0:01", "text": "The town is Kanazawa." },
+  { "timestamp": "1:02", "text": "Visit the garden." },
+  { "timestamp": "1:02:03", "text": "Later in the film." },
+  { "timestamp": "nope", "text": "Skip this row." }
+]

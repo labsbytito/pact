@@ -144,7 +144,7 @@ Do not default to:
 
 Pact's distinctiveness should come from the **source-to-intention-to-action** experience, not cosmetic effects.
 
-For detailed design direction and a Stitch-ready brief, see [`DESIGN.md`](./DESIGN.md).
+For the design source of truth, see [`docs/DESIGN-SOURCE.md`](./docs/DESIGN-SOURCE.md).
 
 ## 12. Main Chrome experience
 

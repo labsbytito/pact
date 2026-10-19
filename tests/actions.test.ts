@@ -7,7 +7,7 @@ import {
   ActionStore,
   validateToolArguments,
   type Run,
-} from "../server/actions";
+} from "../backend/lib/actions";
 
 const input = {
   title: "Request details",
